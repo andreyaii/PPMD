@@ -40,11 +40,6 @@
 
       <button class="btn-primary" onclick="openAddModal()">＋ Add Group</button>
 
-      <input type="file" id="excelUpload" accept=".xlsx, .xls" style="display:none"/>
-      <button class="btn-secondary" onclick="document.getElementById('excelUpload').click()">
-        📥 Import Excel
-      </button>
-
       <!-- DARK MODE TOGGLE -->
       <button class="dark-toggle" id="darkToggle" onclick="toggleDarkMode()" title="Toggle dark mode">
         <span class="dark-toggle-icon" id="darkIcon">🌙</span>
@@ -164,6 +159,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="script.js"></script>
 

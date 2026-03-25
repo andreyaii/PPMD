@@ -22,45 +22,151 @@ document.addEventListener("DOMContentLoaded", () => {
   let pendingDel  = null;
   let thumbData   = null;
 
-  // ── UNIQUE ID ──
-  function generateId(prefix = 'g') {
-    return prefix + '_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+// Helper to find data regardless of column name casing (e.g., "title" vs "Title")
+function getCellValue(row, variations) {
+  const key = Object.keys(row).find(k => 
+    variations.some(v => k.toLowerCase().trim() === v.toLowerCase())
+  );
+  return key ? row[key] : null;
+}
+
+// UNIQUE ID
+async function fetchGroups() {
+  const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsuxgyDT3wSPVxstsNG3RZhYSYYwcEEfp3lQgoqwWYTSf4co7p8NUdg9v-WPW0mIbIF9MDcVhRaoYR/pub?output=csv';
+
+  try {
+    console.log("Fetching data from Google Sheets...");
+    const res = await fetch(SHEET_URL);
+    
+    if (!res.ok) throw new Error("Could not fetch sheet. Make sure it is Published to Web as CSV.");
+    
+    const text = await res.text();
+    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+    const data = parsed.data;
+
+    if (data.length === 0) {
+      console.warn("Sheet is empty or headers don't match.");
+    }
+
+    // Map data with flexible header names
+    const sheetGroups = data.map((row, i) => {
+      const gNum = getCellValue(row, ["Group Number", "Group No", "Group", "group"]) || "N/A";
+      return {
+        // Use Group Number + Title as ID so it's unique but persistent
+        id: "sheet-" + gNum.toString().replace(/\s+/g, '-'),
+        groupNum: gNum,
+        title: getCellValue(row, ["Title", "Project Title", "Project"]) || "Untitled Project",
+        desc:  getCellValue(row, ["Description", "Desc", "Abstract"]) || "No description.",
+        tag:   getCellValue(row, ["Tag", "Category", "Type"]) || "Other",
+        stage: getCellValue(row, ["Stage", "Status", "Year"]) || "Capstone 1",
+        thumb: null
+      };
+    });
+
+    // Save to global variable
+    groups = sheetGroups;
+    
+    // Save a backup to local storage
+    localStorage.setItem('cap_groups_v3', JSON.stringify(groups));
+    
+    console.log("Successfully loaded " + groups.length + " groups.");
+    renderGrid();
+
+  } catch (e) {
+    console.error("Error loading Google Sheet:", e);
+    // If it fails, try to load from the last successful cache
+    const cached = localStorage.getItem('cap_groups_v3');
+    if (cached) {
+      groups = JSON.parse(cached);
+      renderGrid();
+    } else {
+      document.getElementById('cardGrid').innerHTML = `<p style="color:red; text-align:center;">Failed to load data. Please check your internet or Google Sheet settings.</p>`;
+    }
   }
+}
 
-  // ── EXCEL IMPORT ──
-  document.getElementById('excelUpload').addEventListener('change', handleExcelUpload);
+// Update the Init function
+document.addEventListener("DOMContentLoaded", () => {
+  // Load ratings/comments first
+  ratings = JSON.parse(localStorage.getItem('cap_ratings_v3')) || {};
+  comments = JSON.parse(localStorage.getItem('cap_comments_v3')) || {};
 
-  function handleExcelUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function(event) {
-      const data = new Uint8Array(event.target.result);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      importExcelData(XLSX.utils.sheet_to_json(sheet));
-      e.target.value = '';
+  // Trigger the live fetch
+  fetchGroups();
+});
+
+// ── MODIFIED SUBMIT GROUP (for local additions) ──
+window.submitGroup = function() {
+    // ... (keep your validation logic)
+    
+    const newGroup = {
+      id:       'manual_' + Date.now(), // Prefix to distinguish from sheet groups
+      groupNum: gn,
+      title:    ti,
+      desc:     de,
+      tag:      tg,
+      stage:    st,
+      thumb:    thumbData || null
     };
-    reader.readAsArrayBuffer(file);
-  }
 
-  function importExcelData(data) {
-    if (!data.length) return;
-    data.forEach((row, index) => {
+    groups.push(newGroup);
+    // We save the WHOLE groups array so manual ones persist after refresh
+    localStorage.setItem(GK, JSON.stringify(groups)); 
+    
+    closeModal('addModal');
+    renderGrid();
+};
+
+  // ── UPDATED EXCEL UPLOAD ──
+function handleExcelUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const data = new Uint8Array(event.target.result);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const jsonData = XLSX.utils.sheet_to_json(sheet);
+    
+    importExcelData(jsonData);
+    e.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function importExcelData(data) {
+  if (!data.length) return;
+
+  let addedCount = 0;
+
+  data.forEach((row) => {
+    // 1. Clean the Group Number to use as a Unique ID
+    const rawGroupNum = row["Group Number"] || row["group"] || "N/A";
+    const cleanId = rawGroupNum.toString().trim().replace(/\s+/g, '-');
+
+    // 2. Check if this group already exists (prevent duplicates)
+    const exists = groups.some(g => g.id === cleanId);
+    
+    if (!exists) {
       groups.push({
-        id:       generateId('excel_' + index),
-        groupNum: row["Group Number"] || row["group"]       || "N/A",
+        id:       cleanId, // Consistent ID for ratings
+        groupNum: rawGroupNum,
         title:    row["Title"]        || row["title"]       || "Untitled Project",
         desc:     row["Description"]  || row["desc"]        || "No description provided.",
         tag:      row["Tag"]          || row["tag"]         || "Other",
         stage:    row["Stage"]        || row["stage"]       || "Capstone 1",
         thumb:    null
       });
-    });
-    persist(GK, groups);
-    renderGrid();
-    alert(`✅ Imported ${data.length} groups successfully!`);
-  }
+      addedCount++;
+    }
+  });
+
+  // 3. Persist the combined list (Google Sheet + Manual + Excel)
+  localStorage.setItem(GK, JSON.stringify(groups));
+  
+  renderGrid();
+  alert(`✅ Processed ${data.length} rows. Added ${addedCount} new groups.`);
+}
 
   // ── FALLBACK SVG THUMBS ──
   const TC = [['#eef2ff','#c7d2fe'],['#d1fae5','#a7f3d0'],['#fef3c7','#fde68a'],
@@ -480,5 +586,20 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // ── INIT ──
-  renderGrid();
+  (async function init() {
+    const grid = document.getElementById('cardGrid');
+    grid.innerHTML = '<p>Loading projects…</p>';
+
+    try {
+      await fetchGroups();
+    } catch(e) {
+      console.error(e);
+      grid.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">⚠️</div>
+        <h3>Failed to load projects</h3>
+        <p>Check your internet connection or the Google Sheet URL.</p>
+      </div>`;
+    }
+    // If fetchGroups succeeded but no groups, renderGrid will handle empty state
+  })();
 });
