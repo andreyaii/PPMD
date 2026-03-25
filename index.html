@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PPMD</title>
+<link rel="icon" type="image/png" href="res/logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <div class="header-brand">
+      <div class="header-logo">🎓</div>
+      <div>
+        <div class="header-title">Project Proposal Monitoring Dashboard</div>
+        <div class="header-subtitle">Track and manage student project proposals</div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search by title or group no…"/>
+      </div>
+
+      <!-- TAG FILTER DROPDOWN — options built dynamically from groups data -->
+      <div class="tag-filter-wrap" id="tagFilterWrap">
+        <button class="tag-filter-btn" id="tagFilterBtn" onclick="toggleTagDropdown()">
+          <span id="tagFilterLabel">🏷 All Tags</span>
+          <span class="tag-filter-arrow" id="tagArrow">▾</span>
+        </button>
+        <div class="tag-dropdown" id="tagDropdown">
+          <!-- populated by buildTagDropdown() in script.js -->
+        </div>
+      </div>
+
+      <button class="btn-primary" onclick="openAddModal()">＋ Add Group</button>
+
+      <input type="file" id="excelUpload" accept=".xlsx, .xls" style="display:none"/>
+      <button class="btn-secondary" onclick="document.getElementById('excelUpload').click()">
+        📥 Import Excel
+      </button>
+
+      <!-- DARK MODE TOGGLE -->
+      <button class="dark-toggle" id="darkToggle" onclick="toggleDarkMode()" title="Toggle dark mode">
+        <span class="dark-toggle-icon" id="darkIcon">🌙</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- STATS BAR -->
+<div class="stats-bar">
+  <div class="stats-bar-left">
+    <h2>All Projects</h2>
+    <p id="enrolledLabel">AY 2026–2027 · 0 groups enrolled</p>
+  </div>
+  <div class="stats-chips">
+    <div class="stat-chip"><span class="stat-chip-dot" style="background:#4f46e5"></span><span>Total Groups</span><span class="stat-chip-num" id="statTotal">0</span></div>
+    <div class="stat-chip"><span class="stat-chip-dot" style="background:#10b981"></span><span>Rated</span><span class="stat-chip-num" id="statRated">0</span></div>
+    <div class="stat-chip"><span class="stat-chip-dot" style="background:#6b7280"></span><span>Unrated</span><span class="stat-chip-num" id="statUnrated">0</span></div>
+  </div>
+</div>
+
+<!-- STAGE FILTER TABS — fixed: All Groups | Capstone 1 | Software Engineering 1 -->
+<div class="filter-tabs">
+  <button class="filter-tab active" data-stage="all"                   onclick="setStage('all')">All Groups</button>
+  <button class="filter-tab"        data-stage="Capstone 1"            onclick="setStage('Capstone 1')">Capstone 1</button>
+  <button class="filter-tab"        data-stage="Software Engineering 1" onclick="setStage('Software Engineering 1')">Software Engineering 1</button>
+</div>
+
+<!-- GRID -->
+<div class="grid-section">
+  <div class="section-label" id="sectionLabel">All Projects</div>
+  <div class="grid" id="cardGrid"></div>
+
+  <!-- PAGINATION -->
+  <div class="pagination" id="pagination" style="display:none">
+    <div class="pagination-info" id="paginationInfo"></div>
+    <div class="pagination-controls">
+      <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled>← Prev</button>
+      <div class="page-numbers" id="pageNumbers"></div>
+      <button class="page-btn" id="nextBtn" onclick="changePage(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD GROUP MODAL -->
+<div class="modal-overlay" id="addModal" onclick="overlayClick(event,'addModal')">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">➕ Add New Group</div>
+      <button class="modal-close" onclick="closeModal('addModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Thumbnail Image</label>
+      <div class="thumb-upload" id="uploadArea">
+        <input type="file" id="thumbFile" accept="image/*" onchange="onThumbPick(event)"/>
+        <div class="thumb-upload-icon">🖼️</div>
+        <div class="thumb-upload-text"><strong>Click to upload</strong> or drag &amp; drop
+<span style="font-size:11px;display:block;margin-top:4px;">PNG, JPG, WEBP — any size</span></div>
+      </div>
+      <img id="thumbPreview" class="thumb-preview" alt="Preview"/>
+      <button class="thumb-remove" id="removeThumbBtn" style="display:none" onclick="clearThumb()">✕ Remove image</button>
+    </div>
+    <div class="form-row">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Group Number<span>*</span></label>
+        <input class="form-input" id="fGroupNum" placeholder="e.g. G-01"/>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Tag / Category<span>*</span></label>
+        <select class="form-select" id="fTag" onchange="handleTagChange()">
+          <option value="">Select tag…</option>
+          <option>AI/ML</option><option>IoT</option><option>Mobile</option>
+          <option>Web</option><option>Blockchain</option><option>Data Sci</option>
+          <option>CV</option><option>NLP</option><option>Health</option>
+          <option>EdTech</option><option>Transport</option><option>Drones</option>
+          <option value="Other">Other (custom)</option>
+        </select>
+        <div id="customTagWrap" style="display:none; margin-top:8px;">
+          <input class="form-input" id="fCustomTag" placeholder="Type your custom tag…" maxlength="24"/>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:18px">
+      <label class="form-label">Stage<span>*</span></label>
+      <select class="form-select" id="fStage">
+        <option value="">Select stage…</option>
+        <option>Capstone 1</option>
+        <option>Software Engineering 1</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Project Title<span>*</span></label>
+      <input class="form-input" id="fTitle" placeholder="Enter project title"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description<span>*</span></label>
+      <textarea class="form-textarea" id="fDesc" placeholder="Describe the project proposal…"></textarea>
+    </div>
+    <p class="form-error" id="formErr"></p>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('addModal')">Cancel</button>
+      <button class="btn-submit" onclick="submitGroup()">Add Group</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-overlay" id="delModal" onclick="overlayClick(event,'delModal')">
+  <div class="confirm-modal">
+    <div class="confirm-icon">🗑️</div>
+    <div class="confirm-title">Delete Proposal?</div>
+    <div class="confirm-msg">This will permanently remove the group and all its ratings and comments. This cannot be undone.</div>
+    <div class="confirm-actions">
+      <button class="btn-conf-cancel" onclick="closeModal('delModal')">Cancel</button>
+      <button class="btn-conf-delete" onclick="confirmDelete()">Yes, Delete</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<script src="script.js"></script>
+
+<script>
+  // ── DARK MODE ──
+  const DARK_KEY = 'ppmd_dark_mode';
+
+  function applyDark(isDark) {
+    document.documentElement.classList.toggle('dark', isDark);
+    document.getElementById('darkIcon').textContent = isDark ? '☀️' : '🌙';
+    document.getElementById('darkToggle').classList.toggle('active', isDark);
+  }
+
+  function toggleDarkMode() {
+    const isDark = !document.documentElement.classList.contains('dark');
+    localStorage.setItem(DARK_KEY, isDark);
+    applyDark(isDark);
+  }
+
+  // Restore preference on load
+  applyDark(localStorage.getItem(DARK_KEY) === 'true');
+</script>
+
+</body>
+</html>
