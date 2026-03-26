@@ -1,298 +1,158 @@
-// ══════════════════════════════════════════════════════════════
-//  PPMD — script.js
-//  Google Apps Script-backed Project Proposal Monitoring Dashboard
-// ══════════════════════════════════════════════════════════════
-
-// ▼▼▼ SET THIS TO YOUR DEPLOYED WEB APP URL ▼▼▼
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbys9fcx53NC_ATgpcyvJGqJlQkWLScohQg_N4Sz2RfSJ1O-lGGXTcFkG-lv6YT7qXFWKA/exec";
-// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
-
 document.addEventListener("DOMContentLoaded", () => {
 
   // ══════════════════════════════════════════════
-  // STATE
+  // GOOGLE SHEETS API CONNECTION
   // ══════════════════════════════════════════════
-  const FAV_KEY = "ppmd_fav_v1"; // localStorage only — student favorites
+  const API_URL = 'https://script.google.com/macros/s/AKfycbz7pDAcJggFU5jjNZ3YYMbZoHD1Fv_s-qZdVkm8JJbikNju-gR1YWyC695KwyKKBnihgA/exec'; 
 
-  let groups    = [];   // from Apps Script
-  let rcData    = [];   // ratings & comments from Apps Script
+  const FAV = 'cap_favorites_v1'; 
+  let groups = [];
+  let ratings = {};
+  let comments = {};
+  let favorites = {}; 
 
-  let currentRole    = null;
-  let currentFaculty = null;
-  let viewingGroupId = null;
-  let pendingStarVal = 0;
+  try { favorites = JSON.parse(localStorage.getItem(FAV)) || {}; } catch { favorites = {}; }
 
-  let activeStage = "all";
-  let activeTag   = "all";
-  let query       = "";
+  // Fetch data from Google Sheets on load
+  // Fetch data from Google Sheets on load
+  async function loadDatabase() {
+    const enrolledLabel = document.getElementById('enrolledLabel');
+    enrolledLabel.textContent = "Loading database from Google Sheets...";
+    
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      
+      // Map the projects using column indexes [0, 1, 2, 3, 4]
+      // row[0] = Group Num, row[1] = Title, row[2] = Description, row[3] = Tag, row[4] = Stage
+      groups = data.projects.map(row => ({
+        id: String(row[0] || 'Unknown'),          
+        groupNum: String(row[0] || 'N/A').replace(/Group\s*/i, ''),    
+        title: String(row[1] || 'Untitled Project'),               
+        desc: String(row[2] || 'No description provided.').replace(/\n/g, '<br>'),                
+        tag: String(row[3] || 'Other'),                 
+        stage: String(row[4] || 'Capstone 1'), // This fixes the filtering issue!
+        thumb: ''                    
+      }));
+
+      ratings = {};
+      comments = {}; // This will now store arrays of comments
+      
+      data.feedback.forEach(row => {
+        const gid = String(row[0]);
+        const facName = String(row[2]);
+        const rating = Number(row[3]);
+        const comment = String(row[4]);
+
+        // 1. Store the rating (only if it's the first one found or > 0)
+        if (!ratings[gid]) ratings[gid] = {};
+        if (!ratings[gid][facName] || ratings[gid][facName] === 0) {
+            ratings[gid][facName] = rating;
+        }
+
+        // 2. Store comments as an array so we don't lose the old ones
+        if (!comments[gid]) comments[gid] = [];
+        comments[gid].push({
+            name: facName,
+            text: comment,
+            rating: rating
+        });
+      });
+
+      renderGrid();
+    } catch (error) {
+      console.error("Error loading database:", error);
+      enrolledLabel.textContent = "⚠️ Error connecting to database.";
+    }
+  }
+
+  // Load data immediately
+  loadDatabase();
+
+  // ══════════════════════════════════════════════
+  // ROLE STATE & UI
+  // ══════════════════════════════════════════════
+  let currentRole       = null;   
+  let currentFaculty    = null;   
+  let viewingGroupId    = null;   
+  let pendingDel        = null;
+  let thumbData         = null;
+
+  let activeStage = 'all';
+  let activeTag   = 'all';
+  let query       = '';
   let currentPage = 1;
-  const PAGE_SIZE = 12;
+  const PAGE_SIZE = 10;
 
-  let favorites = loadLocal(FAV_KEY) || {};
-
-  // ══════════════════════════════════════════════
-  // LOCAL STORAGE HELPERS (for favorites only)
-  // ══════════════════════════════════════════════
-  function loadLocal(k) {
-    try { return JSON.parse(localStorage.getItem(k)) || null; } catch { return null; }
-  }
-  function saveLocal(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
-
-  // ══════════════════════════════════════════════
-  // CONFIG CHECK
-  // ══════════════════════════════════════════════
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE") {
-    document.getElementById("configBanner").classList.remove("hidden");
-  }
-
-  // ══════════════════════════════════════════════
-  // ROLE SELECTION
-  // ══════════════════════════════════════════════
   window.chooseRole = function(role) {
-    if (role === "faculty") {
-      closeOverlay("roleOverlay");
-      openOverlay("nameOverlay");
-      setTimeout(() => document.getElementById("nameInput").focus(), 300);
+    if (role === 'faculty') {
+      closeModal('nameModal');
+      showModal('facultyNameModal');
+      setTimeout(() => document.getElementById('facultyNameInput').focus(), 300);
     } else {
-      currentRole    = "student";
+      currentRole = 'student';
       currentFaculty = null;
-      closeOverlay("roleOverlay");
-      activateApp();
+      closeModal('nameModal');
+      applyRoleUI();
+      renderGrid();
     }
   };
 
-  window.back = function() {
-    closeOverlay("nameOverlay");
-    openOverlay("roleOverlay");
-  };
-
-  window.confirmName = function() {
-    const name = document.getElementById("nameInput").value.trim();
-    const err  = document.getElementById("nameErr");
-    if (!name) { err.textContent = "⚠ Please enter your name."; return; }
-    err.textContent = "";
-    currentRole    = "faculty";
+  window.confirmFacultyName = function() {
+    const name = document.getElementById('facultyNameInput').value.trim();
+    const err  = document.getElementById('nameErr');
+    if (!name) {
+      err.textContent = '⚠ Please enter your name.';
+      err.style.display = 'block';
+      return;
+    }
+    err.style.display = 'none';
+    currentRole    = 'faculty';
     currentFaculty = name;
-    closeOverlay("nameOverlay");
-    activateApp();
+    closeModal('facultyNameModal');
+    applyRoleUI();
+    renderGrid();
   };
 
   window.switchRole = function() {
     currentRole    = null;
     currentFaculty = null;
-    document.getElementById("nameInput").value = "";
-    document.getElementById("nameErr").textContent = "";
-    openOverlay("roleOverlay");
-    document.getElementById("appHeader").classList.add("hidden");
-    document.getElementById("appBody").classList.add("hidden");
-  };
-
-  function activateApp() {
+    document.getElementById('facultyNameInput').value = '';
+    showModal('nameModal');
     applyRoleUI();
-    document.getElementById("appHeader").classList.remove("hidden");
-    document.getElementById("appBody").classList.remove("hidden");
-    loadData();
-  }
+  };
 
   function applyRoleUI() {
-    const isFac   = currentRole === "faculty";
-    const rl      = document.getElementById("roleLabel");
-    const sw      = document.getElementById("roleSwitcher");
-    const fc      = document.getElementById("facControls");
+    const badge = document.getElementById('roleBadge');
+    const fc    = document.getElementById('facultyControls');
+    const rl    = document.getElementById('roleLabel');
 
-    if (currentRole === "faculty") {
-      rl.textContent = `Faculty — ${currentFaculty}`;
-      sw.textContent = `👩‍🏫 ${currentFaculty} · Switch`;
-      sw.className   = "role-switcher fac";
-      fc.classList.remove("hidden");
+    if (currentRole === 'faculty') {
+      badge.textContent = `👩‍🏫 ${currentFaculty} · Switch`;
+      badge.className   = 'role-badge faculty';
+      fc.style.display  = 'flex';
+      rl.textContent    = `Faculty view — logged in as ${currentFaculty}`;
+    } else if (currentRole === 'student') {
+      badge.textContent = '🎓 Student View · Switch';
+      badge.className   = 'role-badge student';
+      fc.style.display  = 'none';
+      rl.textContent    = 'Student view — read only';
     } else {
-      rl.textContent = "Student View — read only";
-      sw.textContent = "🎓 Student · Switch";
-      sw.className   = "role-switcher stu";
-      fc.classList.add("hidden");
+      badge.textContent = '';
+      fc.style.display  = 'none';
     }
   }
 
   // ══════════════════════════════════════════════
-  // DATA LOADING
+  // HELPERS
   // ══════════════════════════════════════════════
-  window.loadData = async function() {
-    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE") {
-      showError("Apps Script URL not configured. Please set APPS_SCRIPT_URL in script.js.");
-      return;
-    }
-
-    showLoading();
-    try {
-      const res  = await fetch(APPS_SCRIPT_URL);
-      const data = await res.json();
-      if (data.status !== "ok") throw new Error(data.message || "API error");
-
-      groups = data.groups  || [];
-      rcData = data.comments || [];
-
-      hideLoading();
-      renderGrid();
-    } catch (err) {
-      showError("Failed to load data: " + err.message);
-    }
-  };
-
-  function showLoading() {
-    document.getElementById("loadingState").classList.remove("hidden");
-    document.getElementById("errorState").classList.add("hidden");
-    document.getElementById("sectionHead").style.display = "none";
-    document.getElementById("cardGrid").innerHTML = "";
-    document.getElementById("pagination").style.display = "none";
-  }
-
-  function hideLoading() {
-    document.getElementById("loadingState").classList.add("hidden");
-    document.getElementById("sectionHead").style.display = "flex";
-  }
-
-  function showError(msg) {
-    document.getElementById("loadingState").classList.add("hidden");
-    document.getElementById("errorState").classList.remove("hidden");
-    document.getElementById("errorMsg").textContent = msg;
-  }
-
-  // ══════════════════════════════════════════════
-  // DATA HELPERS
-  // ══════════════════════════════════════════════
-  function avgRating(gid) {
-    const rows = rcData.filter(r => r.groupId === gid && r.rating !== null && r.rating !== "");
-    if (!rows.length) return 0;
-    return rows.reduce((s, r) => s + Number(r.rating), 0) / rows.length;
-  }
-
-  function allComments(gid) {
-    return rcData.filter(r => r.groupId === gid && r.comment && r.comment.trim());
-  }
-
-  function myRating(gid) {
-    const row = rcData.find(r => r.groupId === gid && r.faculty === currentFaculty && r.rating !== null && r.rating !== "");
-    return row ? Number(row.rating) : 0;
-  }
-
-  function myComments(gid) {
-    return rcData.filter(r => r.groupId === gid && r.faculty === currentFaculty && r.comment && r.comment.trim());
-  }
-
-  // ══════════════════════════════════════════════
-  // SEARCH & FILTER WIRING
-  // ══════════════════════════════════════════════
-  document.getElementById("searchInput").addEventListener("input", function() {
-    query = this.value.trim().toLowerCase();
-    currentPage = 1;
-    renderGrid();
-  });
-
-  window.setStage = function(stage) {
-    activeStage = stage;
-    currentPage = 1;
-    document.querySelectorAll(".tab").forEach(b =>
-      b.classList.toggle("active", b.dataset.stage === stage));
-    renderGrid();
-  };
-
-  window.toggleTagMenu = function() {
-    document.getElementById("tagBtn").classList.toggle("open");
-    document.getElementById("tagMenu").classList.toggle("open");
-  };
-
-  document.addEventListener("click", e => {
-    if (!e.target.closest("#tagWrap")) {
-      document.getElementById("tagBtn").classList.remove("open");
-      document.getElementById("tagMenu").classList.remove("open");
-    }
-  });
-
-  function buildTagMenu() {
-    const used = [...new Set(groups.map(g => g.tag).filter(Boolean))].sort();
-    const menu = document.getElementById("tagMenu");
-    menu.innerHTML = [
-      `<button class="tag-item${activeTag === "all" ? " active" : ""}" onclick="setTagFilter('all')">🏷 All Tags</button>`,
-      ...used.map(t => `<button class="tag-item${activeTag === t ? " active" : ""}" onclick="setTagFilter('${t.replace(/'/g, "\\'")}')">${t}</button>`)
-    ].join("");
-    if (!used.length) menu.innerHTML += `<span style="display:block;padding:10px 16px;font-size:12px;color:var(--sub)">No tags yet</span>`;
-  }
-
-  window.setTagFilter = function(tag) {
-    activeTag = tag;
-    document.getElementById("tagLabel").textContent = tag === "all" ? "All Tags" : tag;
-    document.getElementById("tagBtn").classList.toggle("active-f", tag !== "all");
-    document.getElementById("tagBtn").classList.remove("open");
-    document.getElementById("tagMenu").classList.remove("open");
-    currentPage = 1;
-    renderGrid();
-  };
-
-  // ══════════════════════════════════════════════
-  // RENDER GRID
-  // ══════════════════════════════════════════════
-  function updateStats() {
-    const total = groups.length;
-    const rated = groups.filter(g => avgRating(g.groupId) > 0).length;
-    document.getElementById("stTotal").textContent   = total;
-    document.getElementById("stRated").textContent   = rated;
-    document.getElementById("stUnrated").textContent = total - rated;
-    document.getElementById("statsEnrolled").textContent =
-      `AY 2026–2027 · ${total} group${total !== 1 ? "s" : ""} enrolled`;
-  }
-
-  function renderGrid() {
-    updateStats();
-    buildTagMenu();
-
-    let list = groups;
-    if (activeStage !== "all") list = list.filter(g => g.stage === activeStage);
-    if (activeTag   !== "all") list = list.filter(g => g.tag   === activeTag);
-    if (query) list = list.filter(g =>
-      g.title.toLowerCase().includes(query) || (g.groupId || "").toLowerCase().includes(query));
-
-    const stagePart = activeStage === "all" ? "All Projects" : activeStage;
-    const tagPart   = activeTag   !== "all" ? ` — ${activeTag}` : "";
-    document.getElementById("sectionLbl").textContent =
-      query ? `Results for "${query}"` : stagePart + tagPart;
-
-    const grid = document.getElementById("cardGrid");
-
-    if (!list.length) {
-      grid.innerHTML = `<div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <h3>${groups.length ? "No results found" : "No groups yet"}</h3>
-        <p>${groups.length ? "Try a different search or filter." : "Add rows to the Groups sheet and refresh."}</p>
-      </div>`;
-      document.getElementById("pagination").style.display = "none";
-      return;
-    }
-
-    const totalPages = Math.ceil(list.length / PAGE_SIZE);
-    if (currentPage > totalPages) currentPage = totalPages;
-    const start    = (currentPage - 1) * PAGE_SIZE;
-    const pageList = list.slice(start, start + PAGE_SIZE);
-
-    grid.innerHTML = pageList.map((g, i) => cardHTML(g, start + i)).join("");
-
-    pageList.forEach(g => {
-      const el = document.getElementById("card-" + g.groupId);
-      if (el) el.addEventListener("click", () => openCardModal(g.groupId));
-    });
-
-    renderPagination(list.length, totalPages);
-  }
-
-  // ══════════════════════════════════════════════
-  // SVG FALLBACK THUMBS
-  // ══════════════════════════════════════════════
-  const TC = [["#eef2ff","#c7d2fe"],["#d1fae5","#a7f3d0"],["#fef3c7","#fde68a"],
-              ["#fee2e2","#fecaca"],["#ede9fe","#ddd6fe"],["#fce7f3","#fbcfe8"],["#dbeafe","#bfdbfe"]];
-  const TI = ["💡","📊","🖥️","🔬","🌐","📱","🤖","🔧","📡","🛰️","🧬","🗺️"];
+  const TC = [['#eef2ff','#c7d2fe'],['#d1fae5','#a7f3d0'],['#fef3c7','#fde68a'],
+              ['#fee2e2','#fecaca'],['#ede9fe','#ddd6fe'],['#fce7f3','#fbcfe8'],['#dbeafe','#bfdbfe']];
+  const TI = ['💡','📊','🖥️','🔬','🌐','📱','🤖','🔧','📡','🛰️','🧬','🗺️'];
 
   function svgThumb(i) {
-    const [c1, c2] = TC[i % TC.length], ic = TI[i % TI.length], uid = "sv" + i;
-    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+    const [c1, c2] = TC[i % TC.length], ic = TI[i % TI.length], uid = 'sv' + i;
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 202">
         <defs><linearGradient id="${uid}" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" style="stop-color:${c1}"/>
@@ -303,313 +163,496 @@ document.addEventListener("DOMContentLoaded", () => {
       </svg>`);
   }
 
-  function starsHTML(val, cls = "star-d", size = "") {
-    return Array.from({length: 5}, (_, i) =>
-      `<span class="${cls}${i < Math.round(val) ? " on" : ""}" ${size}>${"★"}</span>`
-    ).join("");
+  function groupAvgRating(gid) {
+    const r = ratings[gid];
+    if (!r) return 0;
+    const vals = Object.values(r).filter(v => v > 0);
+    if (!vals.length) return 0;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }
+
+  function groupAllComments(gid) {
+    return comments[gid] || []; 
+  }
+
+  function starsHTML(val, max = 5) {
+    let h = '';
+    for (let i = 1; i <= max; i++) {
+      h += `<span class="star-disp${i <= Math.round(val) ? ' lit' : ''}">★</span>`;
+    }
+    return h;
+  }
+
+  // ══════════════════════════════════════════════
+  // FILTERING & UI UPDATES
+  // ══════════════════════════════════════════════
+  document.getElementById('searchInput').addEventListener('input', function() {
+    query = this.value.trim().toLowerCase();
+    currentPage = 1;
+    renderGrid();
+  });
+
+  window.setStage = function(stage) {
+    activeStage = stage;
+    currentPage = 1;
+    document.querySelectorAll('.filter-tab').forEach(b => b.classList.toggle('active', b.dataset.stage === stage));
+    renderGrid();
+  };
+
+  window.toggleTagDropdown = function() {
+    document.getElementById('tagFilterBtn').classList.toggle('open');
+    document.getElementById('tagDropdown').classList.toggle('open');
+  };
+
+  function buildTagDropdown() {
+    const used = [...new Set(groups.map(g => g.tag).filter(Boolean))].sort();
+    const dd   = document.getElementById('tagDropdown');
+    dd.innerHTML = [
+      `<button class="tag-option${activeTag === 'all' ? ' active' : ''}" onclick="setTagFilter('all')">🏷 All Tags</button>`,
+      ...used.map(t => `<button class="tag-option${activeTag === t ? ' active' : ''}" onclick="setTagFilter('${t.replace(/'/g,"\\'")}') ">${t}</button>`)
+    ].join('');
+    if (!used.length) dd.innerHTML += `<span class="tag-dropdown-empty">No tags yet.</span>`;
+  }
+
+  window.setTagFilter = function(tag) {
+    activeTag = tag;
+    document.getElementById('tagFilterLabel').textContent = tag === 'all' ? '🏷 All Tags' : '🏷 ' + tag;
+    document.getElementById('tagFilterBtn').classList.toggle('active-filter', tag !== 'all');
+    document.getElementById('tagFilterBtn').classList.remove('open');
+    document.getElementById('tagDropdown').classList.remove('open');
+    currentPage = 1;
+    renderGrid();
+  };
+
+  function updateStats() {
+    const total = groups.length;
+    const rated = groups.filter(g => groupAvgRating(g.id) > 0).length;
+    document.getElementById('statTotal').textContent   = total;
+    document.getElementById('statRated').textContent   = rated;
+    document.getElementById('statUnrated').textContent = total - rated;
+    document.getElementById('enrolledLabel').textContent =
+      `AY 2026–2027 · ${total} group${total !== 1 ? 's' : ''} enrolled`;
+  }
+
+  function renderGrid() {
+    updateStats();
+    buildTagDropdown();
+
+    let list = groups;
+    if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
+    if (activeTag   !== 'all') list = list.filter(g => g.tag   === activeTag);
+    if (query) list = list.filter(g =>
+      g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query));
+
+    const stagePart = activeStage === 'all' ? 'All Projects' : activeStage;
+    const tagPart   = activeTag   !== 'all' ? ` — ${activeTag}` : '';
+    document.getElementById('sectionLabel').textContent =
+      query ? `Results for "${query}"` : stagePart + tagPart;
+
+    const grid = document.getElementById('cardGrid');
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h3>${groups.length ? 'No results found' : 'No groups yet'}</h3>
+        <p>${groups.length ? 'Try a different search or filter.' : 'Click "+ Add Group" or "Import" to start.'}</p>
+      </div>`;
+      document.getElementById('pagination').style.display = 'none';
+      return;
+    }
+
+    const totalPages = Math.ceil(list.length / PAGE_SIZE);
+    if (currentPage > totalPages) currentPage = totalPages;
+    const start    = (currentPage - 1) * PAGE_SIZE;
+    const pageList = list.slice(start, start + PAGE_SIZE);
+
+    grid.innerHTML = pageList.map((g, i) => cardHTML(g, start + i)).join('');
+
+    pageList.forEach(g => {
+      // Use querySelector to safely select IDs that might have spaces
+      const el = document.querySelector(`[id="card-${g.id}"]`);
+      if (el) el.addEventListener('click', () => openCardModal(g.id));
+    });
+
+    renderPagination(list.length, totalPages);
   }
 
   function cardHTML(g, i) {
-    const avg   = avgRating(g.groupId);
-    const delay = Math.min(i * 0.04, 0.5);
-    const cc    = allComments(g.groupId).length;
-    const thumb = svgThumb(i);
+    const thumb = g.thumb || svgThumb(i);
+    const avg   = groupAvgRating(g.id);
+    const delay = Math.min(i * 0.05, 0.5);
+    const commentCount = groupAllComments(g.id).length;
     return `
-    <div class="card" id="card-${g.groupId}" style="animation-delay:${delay}s">
+    <div class="card" id="card-${g.id}" style="animation-delay:${delay}s">
       <div class="card-thumb">
-        <img src="${thumb}" alt="${g.title}"/>
-        <div class="card-badge">${g.tag || "—"}</div>
+        <img src="${thumb}" alt="${g.title}" onerror="this.src='${svgThumb(i)}'"/>
+        <div class="thumb-badge">${g.tag || '—'}</div>
       </div>
       <div class="card-body">
-        <div class="card-gnum">Group ${g.groupId}</div>
+        <div class="card-group-num">Group ${g.groupNum}</div>
         <div class="card-title">${g.title}</div>
-        <div class="card-desc">${g.description}</div>
+        <div class="card-desc">${g.desc}</div>
       </div>
-      <div class="card-foot">
-        <div class="card-stars">${starsHTML(avg)}</div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${avg > 0 ? `<span class="card-avg">${avg.toFixed(1)}</span>` : `<span class="card-unrated">Unrated</span>`}
-          ${cc > 0 ? `<span class="card-ccount">💬 ${cc}</span>` : ""}
+      <div class="card-footer">
+        <div class="card-footer-stars">${starsHTML(avg)}</div>
+        <div class="card-footer-meta">
+          ${avg > 0 ? `<span class="card-avg">${avg.toFixed(1)}</span>` : '<span class="card-unrated">Unrated</span>'}
+          ${commentCount > 0 ? `<span class="card-comment-count">💬 ${commentCount}</span>` : ''}
         </div>
       </div>
     </div>`;
   }
 
-  // ══════════════════════════════════════════════
-  // PAGINATION
-  // ══════════════════════════════════════════════
   function renderPagination(total, totalPages) {
-    const bar = document.getElementById("pagination");
-    if (totalPages <= 1) { bar.style.display = "none"; return; }
-    bar.style.display = "flex";
+    const bar = document.getElementById('pagination');
+    if (totalPages <= 1) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
     const start = (currentPage - 1) * PAGE_SIZE + 1;
     const end   = Math.min(currentPage * PAGE_SIZE, total);
-    document.getElementById("pageInfo").textContent = `Showing ${start}–${end} of ${total}`;
-    document.getElementById("pgPrev").disabled = currentPage === 1;
-    document.getElementById("pgNext").disabled = currentPage === totalPages;
-
-    const range = [], d = 2;
+    document.getElementById('paginationInfo').textContent = `Showing ${start}–${end} of ${total} groups`;
+    document.getElementById('prevBtn').disabled = currentPage === 1;
+    document.getElementById('nextBtn').disabled = currentPage === totalPages;
+    const range = [], delta = 2;
     for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= currentPage - d && i <= currentPage + d)) range.push(i);
+      if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) range.push(i);
     }
     const withEll = []; let prev = null;
     for (const p of range) {
-      if (prev !== null && p - prev > 1) withEll.push("…");
+      if (prev !== null && p - prev > 1) withEll.push('…');
       withEll.push(p); prev = p;
     }
-    document.getElementById("pgNums").innerHTML = withEll.map(p =>
-      p === "…" ? `<span class="pg-ell">…</span>`
-                : `<button class="pg-num${p === currentPage ? " active" : ""}" onclick="goToPage(${p})">${p}</button>`
-    ).join("");
+    document.getElementById('pageNumbers').innerHTML = withEll.map(p =>
+      p === '…' ? `<span class="page-ellipsis">…</span>`
+                : `<button class="page-num${p === currentPage ? ' active' : ''}" onclick="goToPage(${p})">${p}</button>`
+    ).join('');
   }
 
   window.changePage = function(dir) {
     let list = groups;
-    if (activeStage !== "all") list = list.filter(g => g.stage === activeStage);
-    if (activeTag   !== "all") list = list.filter(g => g.tag   === activeTag);
-    if (query) list = list.filter(g => g.title.toLowerCase().includes(query) || (g.groupId || "").toLowerCase().includes(query));
-    const tp = Math.ceil(list.length / PAGE_SIZE);
-    currentPage = Math.max(1, Math.min(currentPage + dir, tp));
-    renderGrid(); window.scrollTo({ top: 0, behavior: "smooth" });
+    if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
+    if (activeTag   !== 'all') list = list.filter(g => g.tag   === activeTag);
+    if (query) list = list.filter(g => g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query));
+    const totalPages = Math.ceil(list.length / PAGE_SIZE);
+    currentPage = Math.max(1, Math.min(currentPage + dir, totalPages));
+    renderGrid(); window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  window.goToPage = function(p) {
-    currentPage = p; renderGrid(); window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  window.goToPage = function(p) { currentPage = p; renderGrid(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   // ══════════════════════════════════════════════
-  // CARD DETAIL MODAL
+  // CARD MODAL & SAVING FEEDBACK
   // ══════════════════════════════════════════════
   function openCardModal(gid) {
-    const g = groups.find(x => x.groupId === gid);
+    const g = groups.find(x => x.id === gid);
     if (!g) return;
     viewingGroupId = gid;
 
     const i     = groups.indexOf(g);
-    const avg   = avgRating(gid);
+    const thumb = g.thumb || svgThumb(i);
+    const avg   = groupAvgRating(gid);
 
-    document.getElementById("cmHeroImg").src         = svgThumb(i);
-    document.getElementById("cmHeroBadge").textContent = g.tag || "—";
-    document.getElementById("cmGroup").textContent   = `Group ${g.groupId}`;
-    document.getElementById("cmStagePill").textContent = g.stage || "—";
-    document.getElementById("cmTitle").textContent   = g.title;
-    document.getElementById("cmDesc").textContent    = g.description;
+    document.getElementById('cmTitle').textContent    = g.title;
+    document.getElementById('cmGroupNum').textContent = `Group ${g.groupNum}`;
+    document.getElementById('cmStage').textContent    = g.stage || '—';
+    document.getElementById('cmTag').textContent      = g.tag   || '—';
+    document.getElementById('cmDesc').innerHTML = g.desc;
+    document.getElementById('cmThumb').src            = thumb;
 
-    document.getElementById("cmAvgStars").innerHTML = starsHTML(avg, "star-d");
-    document.getElementById("cmAvgVal").textContent = avg > 0 ? `${avg.toFixed(1)} / 5` : "No ratings yet";
+    document.getElementById('cmStarsDisplay').innerHTML = starsHTML(avg, 5);
+    document.getElementById('cmAvgNum').textContent =
+      avg > 0 ? `${avg.toFixed(1)} / 5` : 'No ratings yet';
 
-    const isFac = currentRole === "faculty";
-    document.getElementById("facPanel").classList.toggle("hidden", !isFac);
-    document.getElementById("stuPanel").classList.toggle("hidden", currentRole !== "student");
+    const isFaculty = currentRole === 'faculty';
+    document.getElementById('facultySection').style.display = isFaculty ? 'block' : 'none';
+    document.getElementById('studentSection').style.display = currentRole === 'student' ? 'block' : 'none';
+    document.getElementById('cmDeleteRow').style.display    = isFaculty ? 'block' : 'none';
 
-    if (isFac)                    renderFacPanel(gid);
-    if (currentRole === "student") renderStuPanel(gid);
+    if (isFaculty) renderFacultySection(gid);
+    if (currentRole === 'student') renderStudentSection(gid);
 
-    openOverlay("cardOverlay");
+    showModal('cardModal');
   }
 
-  // ── Faculty Panel ────────────────────────────
-  function renderFacPanel(gid) {
-    const existingRating = myRating(gid);
-    pendingStarVal       = existingRating;
+ function renderFacultySection(gid) {
+    const myRating = (ratings[gid] || {})[currentFaculty] || 0;
+    const hasAlreadyRated = myRating > 0;
 
-    const stars = [...document.querySelectorAll("#cmStarInput .si")];
-    const note  = document.getElementById("facRatingNote");
-
+    const stars = [...document.querySelectorAll('#cmStarRow .star')];
+    
+    // Highlight stars based on existing rating
     stars.forEach(s => {
-      s.classList.toggle("on", +s.dataset.v <= existingRating);
-      s.onclick = e => {
-        e.stopPropagation();
-        pendingStarVal = +s.dataset.v;
-        stars.forEach(x => x.classList.toggle("on", +x.dataset.v <= pendingStarVal));
-      };
+      s.classList.toggle('active', +s.dataset.val <= myRating);
+      
+      // Only allow clicking if they haven't rated yet
+      if (!hasAlreadyRated) {
+        s.style.cursor = "pointer";
+        s.onclick = e => {
+          e.stopPropagation();
+          const v = +s.dataset.val;
+          if (!ratings[gid]) ratings[gid] = {};
+          ratings[gid][currentFaculty] = v;
+          
+          stars.forEach(x => x.classList.toggle('active', +x.dataset.val <= v));
+        };
+      } else {
+        s.style.cursor = "default";
+        s.onclick = null; // Disable clicking
+      }
     });
 
-    note.textContent = existingRating > 0
-      ? `Your current rating: ${existingRating}/5 — saving will update it.`
-      : "";
-
-    // My previous comments
-    const mine  = myComments(gid);
-    const mList = document.getElementById("myComments");
-    if (mine.length) {
-      mList.innerHTML = mine.map(c =>
-        `<div class="my-comment-item">${c.comment}</div>`
-      ).join("");
-    } else {
-      mList.innerHTML = `<p class="no-my-comments">You haven't commented yet.</p>`;
+    // We do NOT load the old comment into the box anymore because we want it empty for new ones
+    document.getElementById('cmComment').value = ''; 
+    document.getElementById('cmSavedMsg').classList.remove('show');
+    
+    // Add a small hint if they already rated
+    if (hasAlreadyRated) {
+        document.querySelector('.cm-section-label').innerHTML = `✏️ Your Rating <span style="color:var(--subtext); font-weight:normal;">(Locked)</span> &amp; New Comment`;
     }
-
-    document.getElementById("cmCommentIn").value = "";
-    document.getElementById("savedToast").classList.remove("show");
   }
 
-  window.submitFacultyFeedback = async function() {
-    const gid     = viewingGroupId;
-    const comment = document.getElementById("cmCommentIn").value.trim();
-    const rating  = pendingStarVal || null;
+window.saveFacultyFeedback = async function() {
+    const gid = viewingGroupId;
+    const g = groups.find(x => x.id === gid);
+    const projectTitle = g ? g.title : "Unknown Title";
 
-    if (!rating && !comment) {
-      alert("Please add a rating or a comment before saving.");
-      return;
+    const commentInput = document.getElementById('cmComment');
+    const text = commentInput.value.trim();
+    const myRating = (ratings[gid] || {})[currentFaculty] || 0;
+    const m = document.getElementById('cmSavedMsg');
+
+    if (!text && myRating === 0) {
+        alert("Please provide a rating or a comment.");
+        return;
     }
 
-    const payload = { groupId: gid, faculty: currentFaculty };
-    if (rating)  payload.rating  = rating;
-    if (comment) payload.comment = comment;
+    m.textContent = "Saving...";
+    m.style.color = "var(--subtext)";
+    m.classList.add('show');
 
     try {
-      const res  = await fetch(APPS_SCRIPT_URL, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(payload),
+      await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'saveFeedback',
+          groupId: gid,
+          title: projectTitle, 
+          facultyName: currentFaculty,
+          rating: myRating,
+          comment: text
+        })
       });
-      const data = await res.json();
-      if (data.status !== "ok") throw new Error(data.message || "Save failed");
 
-      // Refresh data silently
-      const refreshed = await fetch(APPS_SCRIPT_URL);
-      const rd        = await refreshed.json();
-      if (rd.status === "ok") {
-        groups = rd.groups  || [];
-        rcData = rd.comments || [];
-      }
+      // Update local UI state
+      if (!comments[gid]) comments[gid] = [];
+      comments[gid].push({ name: currentFaculty, text: text, rating: myRating });
 
-      document.getElementById("savedToast").classList.add("show");
-      setTimeout(() => document.getElementById("savedToast").classList.remove("show"), 2200);
+      m.textContent = "✓ Comment Added";
+      m.style.color = "#10b981";
+      
+      // CLEAR THE COMMENT BOX for the next one
+      commentInput.value = '';
 
-      // Re-render panel & stats
-      renderFacPanel(gid);
       updateStats();
-      renderGrid();
-
-      // Update avg in open modal
-      const avg = avgRating(gid);
-      document.getElementById("cmAvgStars").innerHTML = starsHTML(avg, "star-d");
-      document.getElementById("cmAvgVal").textContent = avg > 0 ? `${avg.toFixed(1)} / 5` : "No ratings yet";
+      setTimeout(() => m.classList.remove('show'), 2000);
 
     } catch (err) {
-      alert("Error saving: " + err.message);
+      m.textContent = "⚠️ Save failed";
+      m.style.color = "#ef4444";
     }
   };
 
-  // ── Student Panel ────────────────────────────
-  function renderStuPanel(gid) {
-    const all     = allComments(gid);
-    const favName = favorites[gid] || null;
-    const listEl  = document.getElementById("stuCommentsList");
-    const noEl    = document.getElementById("stuNoComments");
-    const favEl   = document.getElementById("stuFavNote");
+  function renderStudentSection(gid) {
+    const allComments = groupAllComments(gid);
+    const favName     = favorites[gid] || null;
+    const listEl      = document.getElementById('cmCommentsList');
+    const noEl        = document.getElementById('cmNoComments');
+    const favNote     = document.getElementById('cmFavNote');
 
-    if (!all.length) {
-      listEl.innerHTML = "";
-      noEl.classList.remove("hidden");
+    if (!allComments.length) {
+      listEl.innerHTML = '';
+      noEl.style.display = 'block';
     } else {
-      noEl.classList.add("hidden");
-      listEl.innerHTML = all.map((c, idx) => {
-        const isFav = favName === c.faculty;
+      noEl.style.display = 'none';
+      listEl.innerHTML = allComments.map((c, idx) => {
+        const isFav = favName === c.name;
         return `
-        <div class="comment-card${isFav ? " fav-on" : ""}">
-          <div class="cc-top">
-            <span class="cc-anon">Anonymous Faculty ${idx + 1}</span>
-            <div class="cc-stars">${starsHTML(c.rating || 0)}</div>
+        <div class="comment-card${isFav ? ' fav-active' : ''}" id="ccard-${idx}">
+          <div class="comment-card-top">
+            <div class="comment-anon-label">Anonymous Faculty ${idx + 1}</div>
+            <div class="comment-card-stars">${starsHTML(c.rating)}</div>
           </div>
-          <div class="cc-text">${c.comment || "<em style='color:var(--sub)'>No text.</em>"}</div>
-          <button class="fav-btn${isFav ? " fav-on" : ""}" onclick="toggleFav('${gid}','${c.faculty}',${idx})">
-            ${isFav ? "❤️ Favorited" : "🤍 Favorite"}
+          <div class="comment-text">${c.text || '<em style="color:var(--subtext)">No comment written.</em>'}</div>
+          <button class="fav-btn${isFav ? ' fav-active' : ''}" onclick="toggleFav('${gid}','${c.name}',${idx})">
+            ${isFav ? '❤️ Favorited' : '🤍 Mark as Favorite'}
           </button>
         </div>`;
-      }).join("");
+      }).join('');
     }
 
     if (favName) {
-      const idx = all.findIndex(c => c.faculty === favName);
-      favEl.innerHTML = `<div class="fav-selected">❤️ You favorited <strong>Anonymous Faculty ${idx + 1}'s</strong> comment — they could be your advisor.</div>`;
+      const idx = allComments.findIndex(c => c.name === favName);
+      favNote.innerHTML = `<div class="fav-selected-note">❤️ You favorited <strong>Anonymous Faculty ${idx + 1}'s</strong> comment.</div>`;
     } else {
-      favEl.innerHTML = `<span style="font-size:13px;color:var(--sub)">Tap ❤️ on a comment to mark a favorite.</span>`;
+      favNote.innerHTML = `<span style="font-size:13px;color:var(--subtext);">You haven't picked a favorite yet. Tap ❤️ on a comment to pick one.</span>`;
     }
   }
 
   window.toggleFav = function(gid, facultyName, idx) {
-    favorites[gid] = favorites[gid] === facultyName ? undefined : facultyName;
-    if (!favorites[gid]) delete favorites[gid];
-    saveLocal(FAV_KEY, favorites);
-    renderStuPanel(gid);
+    const current = favorites[gid];
+    if (current === facultyName) {
+      delete favorites[gid];
+    } else {
+      favorites[gid] = facultyName;
+    }
+    localStorage.setItem(FAV, JSON.stringify(favorites));
+    renderStudentSection(gid);
   };
 
   // ══════════════════════════════════════════════
-  // ADD GROUP MODAL (info only — data from Sheets)
+  // ADDING & DELETING GROUPS
   // ══════════════════════════════════════════════
   window.openAddModal = function() {
-    if (currentRole !== "faculty") return;
-    openOverlay("addOverlay");
+    if (currentRole !== 'faculty') return;
+    ['fGroupNum','fTitle','fDesc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('fTag').value    = '';
+    document.getElementById('fStage').value  = '';
+    document.getElementById('fCustomTag').value = '';
+    document.getElementById('customTagWrap').style.display = 'none';
+    document.getElementById('formErr').style.display = 'none';
+    clearThumb();
+    openModal('addModal');
   };
 
-  // ══════════════════════════════════════════════
-  // EXPORT TO XLSX
-  // ══════════════════════════════════════════════
-  window.exportXLSX = function() {
-    const rows = groups.map(g => {
-      const avg  = avgRating(g.groupId);
-      const all  = allComments(g.groupId);
-      const rcs  = rcData.filter(r => r.groupId === g.groupId && r.rating !== null && r.rating !== "");
-
-      const row = {
-        "Group ID":      g.groupId,
-        "Title":         g.title,
-        "Description":   g.description,
-        "Tag":           g.tag,
-        "Stage":         g.stage,
-        "Avg Rating":    avg > 0 ? +avg.toFixed(2) : "",
-        "Total Reviews": rcs.length,
-        "Total Comments": all.length,
-      };
-      rcs.forEach(r => { row[`Rating — ${r.faculty}`]  = r.rating  || ""; });
-      all.forEach(c => { row[`Comment — ${c.faculty}`] = c.comment || ""; });
-      return row;
-    });
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "PPMD Export");
-    XLSX.writeFile(wb, `PPMD_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+  window.handleTagChange = function() {
+    const val  = document.getElementById('fTag').value;
+    const wrap = document.getElementById('customTagWrap');
+    if (val === 'Other') { wrap.style.display = 'block'; document.getElementById('fCustomTag').focus(); }
+    else { wrap.style.display = 'none'; document.getElementById('fCustomTag').value = ''; }
   };
 
-  // Import from XLSX (reads group data locally, for preview)
-  const xlsxUp = document.getElementById("xlsxUp");
-  if (xlsxUp) xlsxUp.addEventListener("change", e => {
-    const f = e.target.files[0]; if (!f) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const wb    = XLSX.read(new Uint8Array(ev.target.result), { type: "array" });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const data  = XLSX.utils.sheet_to_json(sheet);
-        alert(`📊 This file has ${data.length} rows.\n\nTo import groups, add them directly in your Google Sheets "Groups" tab, then click Refresh.`);
-      } catch (err) {
-        alert("Could not read file: " + err.message);
-      }
-      e.target.value = "";
+  window.onThumbPick = function(e) {
+    const f = e.target.files; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      thumbData = ev.target.result;
+      const p = document.getElementById('thumbPreview');
+      p.src = thumbData; p.classList.add('show');
+      document.getElementById('removeThumbBtn').style.display = 'block';
     };
-    reader.readAsArrayBuffer(f);
-  });
+    r.readAsDataURL(f);
+  };
 
-  // ══════════════════════════════════════════════
-  // OVERLAY HELPERS
-  // ══════════════════════════════════════════════
-  window.openOverlay  = id => document.getElementById(id).classList.add("open");
-  window.closeOverlay = id => document.getElementById(id).classList.remove("open");
-  window.overlayClick = (e, id) => { if (e.target.id === id) closeOverlay(id); };
+  window.clearThumb = function() {
+    thumbData = null;
+    const p = document.getElementById('thumbPreview');
+    p.src = ''; p.classList.remove('show');
+    document.getElementById('removeThumbBtn').style.display = 'none';
+    document.getElementById('thumbFile').value = '';
+  };
 
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape") {
-      ["cardOverlay","addOverlay","nameOverlay"].forEach(closeOverlay);
+  window.submitGroup = async function() {
+    const gn     = document.getElementById('fGroupNum').value.trim();
+    const ti     = document.getElementById('fTitle').value.trim();
+    const de     = document.getElementById('fDesc').value.trim();
+    const tgRaw  = document.getElementById('fTag').value;
+    const st     = document.getElementById('fStage').value;
+    const custom = document.getElementById('fCustomTag').value.trim();
+    const tg     = tgRaw === 'Other' ? custom : tgRaw;
+    const er     = document.getElementById('formErr');
+    const btn    = document.querySelector('.btn-submit');
+
+    if (!gn || !ti || !de || !tgRaw || !st) {
+      er.textContent = '⚠ Please fill in all required fields.'; er.style.display = 'block'; return;
     }
-  });
+    if (tgRaw === 'Other' && !custom) {
+      er.textContent = '⚠ Please enter a custom tag name.'; er.style.display = 'block';
+      document.getElementById('fCustomTag').focus(); return;
+    }
+    er.style.display = 'none';
 
-  // Enter key in name input
-  document.getElementById("nameInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") window.confirmName();
+    btn.textContent = "Saving...";
+    btn.disabled = true;
+
+    const newGroup = { 
+      id: gn, // Use Group Number as ID
+      groupNum: gn, 
+      title: ti, 
+      desc: de, 
+      tag: tg, 
+      stage: st, 
+      thumb: thumbData || '' 
+    };
+
+    try {
+      await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'addGroup', ...newGroup })
+      });
+
+      groups.push(newGroup);
+      currentPage = 1;
+      closeModal('addModal');
+      renderGrid();
+    } catch (err) {
+      er.textContent = '⚠️ Failed to save to database.'; er.style.display = 'block';
+    } finally {
+      btn.textContent = "Add Group";
+      btn.disabled = false;
+    }
+  };
+
+  window.askDeleteFromModal = function() {
+    pendingDel = viewingGroupId;
+    openModal('delModal');
+  };
+
+  window.confirmDelete = async function() {
+    if (!pendingDel) return;
+    
+    const delBtn = document.querySelector('.btn-conf-delete');
+    const origText = delBtn.textContent;
+    delBtn.textContent = "Deleting...";
+    delBtn.disabled = true;
+
+    try {
+      await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'deleteGroup', groupId: pendingDel })
+      });
+    } catch(e) {
+      console.log("Delete sync failed.", e);
+    }
+
+    groups = groups.filter(g => g.id !== pendingDel);
+    delete ratings[pendingDel];  
+    delete comments[pendingDel]; 
+    delete favorites[pendingDel]; 
+    localStorage.setItem(FAV, JSON.stringify(favorites));
+    
+    pendingDel = null;
+    currentPage = 1;
+    closeModal('delModal');
+    closeModal('cardModal');
+    renderGrid();
+
+    delBtn.textContent = origText;
+    delBtn.disabled = false;
+  };
+
+  // ══════════════════════════════════════════════
+  // MODAL TOGGLES
+  // ══════════════════════════════════════════════
+  window.openModal    = id => document.getElementById(id).classList.add('open');
+  window.closeModal   = id => document.getElementById(id).classList.remove('open');
+  window.showModal    = id => document.getElementById(id).classList.add('open');
+  window.overlayClick = (e, id) => { if (e.target.id === id) closeModal(id); };
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { 
+        closeModal('addModal'); 
+        closeModal('delModal'); 
+        closeModal('cardModal'); 
+        closeModal('facultyNameModal');
+    }
   });
 
 });
