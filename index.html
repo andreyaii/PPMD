@@ -10,9 +10,6 @@
 </head>
 <body>
 
-<!-- ══════════════════════════════════
-     FACULTY NAME PROMPT (shown once)
-══════════════════════════════════ -->
 <div class="modal-overlay open" id="nameModal">
   <div class="modal" style="max-width:420px;text-align:center;">
     <div style="font-size:40px;margin-bottom:12px;">🎓</div>
@@ -22,12 +19,11 @@
     </p>
     <div style="display:flex;flex-direction:column;gap:10px;">
       <button class="btn-primary" style="justify-content:center;padding:12px;" onclick="chooseRole('faculty')">👩‍🏫 I am a Faculty Member</button>
-      <button class="btn-secondary" style="justify-content:center;padding:12px;" onclick="chooseRole('student')">🎓 I am a Student</button>
+      <button class="btn-secondary" style="justify-content:center;padding:12px;" onclick="showStudentLogin()">🎓 I am a Student</button>
     </div>
   </div>
 </div>
 
-<!-- Faculty name input (shown after choosing faculty) -->
 <div class="modal-overlay" id="facultyNameModal">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header">
@@ -45,7 +41,27 @@
   </div>
 </div>
 
-<!-- HEADER -->
+<div class="modal-overlay" id="studentLoginModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">🎓 Student Access</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Group Number <span>*</span></label>
+      <input class="form-input" id="studentGroupInput" placeholder="e.g. G-01"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Access PIN <span>*</span></label>
+      <input type="password" class="form-input" id="studentPinInput" placeholder="Enter the PIN provided by your instructor" maxlength="10"/>
+    </div>
+    <p class="form-error" id="studentLoginErr" style="display:none;margin-top:-10px;margin-bottom:4px;"></p>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="showModal('nameModal');closeModal('studentLoginModal')">← Back</button>
+      <button class="btn-submit" onclick="verifyStudentLogin()">Access Dashboard →</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="header-inner">
     <div class="header-brand">
@@ -61,7 +77,6 @@
         <input type="text" id="searchInput" placeholder="Search by title or group no…"/>
       </div>
 
-      <!-- TAG FILTER -->
       <div class="tag-filter-wrap" id="tagFilterWrap">
         <button class="tag-filter-btn" id="tagFilterBtn" onclick="toggleTagDropdown()">
           <span id="tagFilterLabel">🏷 All Tags</span>
@@ -70,7 +85,6 @@
         <div class="tag-dropdown" id="tagDropdown"></div>
       </div>
 
-      <!-- FACULTY ONLY CONTROLS -->
       <div id="facultyControls" style="display:none;align-items:center;gap:10px;">
         <button class="btn-primary" onclick="openAddModal()">＋ Add Group</button>
         <input type="file" id="excelUpload" accept=".xlsx,.xls" style="display:none"/>
@@ -78,7 +92,6 @@
         <button class="btn-secondary" onclick="exportToExcel()">📤 Export</button>
       </div>
 
-      <!-- ROLE BADGE -->
       <div class="role-badge" id="roleBadge" onclick="switchRole()"></div>
 
       <button class="dark-toggle" id="darkToggle" onclick="toggleDarkMode()" title="Toggle dark mode">
@@ -88,7 +101,6 @@
   </div>
 </header>
 
-<!-- STATS BAR -->
 <div class="stats-bar">
   <div class="stats-bar-left">
     <h2>All Projects</h2>
@@ -101,14 +113,12 @@
   </div>
 </div>
 
-<!-- STAGE TABS -->
 <div class="filter-tabs">
   <button class="filter-tab active" data-stage="all" onclick="setStage('all')">All Groups</button>
   <button class="filter-tab" data-stage="Capstone 1" onclick="setStage('Capstone 1')">Capstone 1</button>
   <button class="filter-tab" data-stage="Software Engineering 1" onclick="setStage('Software Engineering 1')">Software Engineering 1</button>
 </div>
 
-<!-- GRID -->
 <div class="grid-section">
   <div class="section-label" id="sectionLabel">All Projects</div>
   <div class="grid" id="cardGrid"></div>
@@ -122,10 +132,6 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════
-     CARD DETAIL MODAL
-     (replaces accordion — same fields as old Add Group modal)
-══════════════════════════════════ -->
 <div class="modal-overlay" id="cardModal" onclick="overlayClick(event,'cardModal')">
   <div class="modal card-modal">
     <div class="modal-header">
@@ -133,24 +139,20 @@
       <button class="modal-close" onclick="closeModal('cardModal')">✕</button>
     </div>
 
-    <!-- Thumbnail -->
     <div class="cm-thumb-wrap">
       <img id="cmThumb" src="" alt=""/>
       <span class="cm-tag-badge" id="cmTag">—</span>
     </div>
 
-    <!-- Meta -->
     <div class="cm-meta">
       <span class="cm-group-num" id="cmGroupNum">—</span>
       <span class="cm-stage" id="cmStage">—</span>
     </div>
 
-    <!-- Description -->
     <p class="cm-desc" id="cmDesc">—</p>
 
     <div class="cm-divider"></div>
 
-    <!-- Overall Rating (read-only avg) -->
     <div class="cm-section">
       <div class="cm-section-label">⭐ Overall Rating</div>
       <div class="cm-avg-row">
@@ -159,7 +161,6 @@
       </div>
     </div>
 
-    <!-- ── FACULTY VIEW SECTION ── -->
     <div id="facultySection" style="display:none">
       <div class="cm-divider"></div>
       <div class="cm-section">
@@ -181,7 +182,6 @@
       </div>
     </div>
 
-    <!-- ── STUDENT VIEW: All comments (anonymous) ── -->
     <div id="studentSection" style="display:none">
       <div class="cm-divider"></div>
       <div class="cm-section">
@@ -196,16 +196,12 @@
       </div>
     </div>
 
-    <!-- FACULTY: delete button -->
     <div id="cmDeleteRow" style="display:none;margin-top:16px;">
       <button class="delete-btn" style="margin-left:0;width:100%;" onclick="askDeleteFromModal()">🗑 Delete This Proposal</button>
     </div>
   </div>
 </div>
 
-<!-- ══════════════════════════════════
-     ADD GROUP MODAL (faculty only)
-══════════════════════════════════ -->
 <div class="modal-overlay" id="addModal" onclick="overlayClick(event,'addModal')">
   <div class="modal">
     <div class="modal-header">
@@ -256,6 +252,11 @@
       <input class="form-input" id="fTitle" placeholder="Enter project title"/>
     </div>
     <div class="form-group">
+      <label class="form-label">Access PIN <span>*</span></label>
+      <input type="text" class="form-input" id="fPin" placeholder="Create a secure PIN for students (e.g. 1234)"/>
+      <p style="font-size:11px;color:var(--subtext);margin-top:4px;">Students will need this PIN to view their feedback.</p>
+    </div>
+    <div class="form-group">
       <label class="form-label">Description<span>*</span></label>
       <textarea class="form-textarea" id="fDesc" placeholder="Describe the project proposal…"></textarea>
     </div>
@@ -267,7 +268,6 @@
   </div>
 </div>
 
-<!-- DELETE CONFIRM MODAL -->
 <div class="modal-overlay" id="delModal" onclick="overlayClick(event,'delModal')">
   <div class="confirm-modal">
     <div class="confirm-icon">🗑️</div>

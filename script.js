@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
   try { favorites = JSON.parse(localStorage.getItem(FAV)) || {}; } catch { favorites = {}; }
 
   // Fetch data from Google Sheets on load
-  // Fetch data from Google Sheets on load
+// Fetch data from Google Sheets on load
   async function loadDatabase() {
     const enrolledLabel = document.getElementById('enrolledLabel');
     enrolledLabel.textContent = "Loading database from Google Sheets...";
@@ -23,34 +23,35 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch(API_URL);
       const data = await response.json();
       
-      // Map the projects using column indexes [0, 1, 2, 3, 4]
-      // row[0] = Group Num, row[1] = Title, row[2] = Description, row[3] = Tag, row[4] = Stage
+      // FIX: Use row[index] to get specific columns
+      // row[0]=ID/GroupNum, row[1]=Title, row[2]=Desc, row[3]=Tag, row[4]=Stage, row[5]=PIN
       groups = data.projects.map(row => ({
         id: String(row[0] || 'Unknown'),          
         groupNum: String(row[0] || 'N/A').replace(/Group\s*/i, ''),    
         title: String(row[1] || 'Untitled Project'),               
         desc: String(row[2] || 'No description provided.').replace(/\n/g, '<br>'),                
         tag: String(row[3] || 'Other'),                 
-        stage: String(row[4] || 'Capstone 1'), // This fixes the filtering issue!
+        stage: String(row[4] || 'Capstone 1'),
+        pin: String(row[5] || ''), 
         thumb: ''                    
       }));
 
       ratings = {};
-      comments = {}; // This will now store arrays of comments
+      comments = {}; 
       
+      // FIX: Map feedback columns correctly
+      // row[0]=GID, row[1]=Title, row[2]=Faculty, row[3]=Rating, row[4]=Comment
       data.feedback.forEach(row => {
         const gid = String(row[0]);
-        const facName = String(row[2]);
-        const rating = Number(row[3]);
-        const comment = String(row[4]);
+        const facName = String(row[2]); // Faculty is now in Column C (index 2)
+        const rating = Number(row[3]);  // Rating is now in Column D (index 3)
+        const comment = String(row[4]); // Comment is now in Column E (index 4)
 
-        // 1. Store the rating (only if it's the first one found or > 0)
         if (!ratings[gid]) ratings[gid] = {};
         if (!ratings[gid][facName] || ratings[gid][facName] === 0) {
             ratings[gid][facName] = rating;
         }
 
-        // 2. Store comments as an array so we don't lose the old ones
         if (!comments[gid]) comments[gid] = [];
         comments[gid].push({
             name: facName,
@@ -65,7 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
       enrolledLabel.textContent = "⚠️ Error connecting to database.";
     }
   }
-
   // Load data immediately
   loadDatabase();
 
@@ -84,18 +84,71 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentPage = 1;
   const PAGE_SIZE = 10;
 
-  window.chooseRole = function(role) {
-    if (role === 'faculty') {
+ window.chooseRole = function(role) {
+  if (role === 'faculty') {
+    closeModal('nameModal');
+    showModal('facultyNameModal');
+    setTimeout(() => document.getElementById('facultyNameInput').focus(), 300);
+  } else {
+    // ADD THIS:
+    showStudentLogin();
+  }
+};
+
+  window.showStudentLogin = function() {
       closeModal('nameModal');
-      showModal('facultyNameModal');
-      setTimeout(() => document.getElementById('facultyNameInput').focus(), 300);
-    } else {
+      showModal('studentLoginModal');
+      document.getElementById('studentLoginErr').style.display = 'none';
+      document.getElementById('studentGroupInput').value = '';
+      document.getElementById('studentPinInput').value = '';
+      setTimeout(() => document.getElementById('studentGroupInput').focus(), 300);
+  };
+
+  window.verifyStudentLogin = function() {
+      const gNum = document.getElementById('studentGroupInput').value.trim();
+      const pin = document.getElementById('studentPinInput').value.trim();
+      const err = document.getElementById('studentLoginErr');
+
+    
+      if (!gNum || !pin) {
+          err.textContent = '⚠ Please enter both Group Number and PIN.';
+          err.style.display = 'block';
+          return;
+      }
+
+      // Find the group (case insensitive)
+      const group = groups.find(g => 
+        g.id.toLowerCase() === gNum.toLowerCase() || 
+        g.groupNum.toLowerCase() === gNum.toLowerCase()
+      );
+
+      
+      if (!group) {
+          err.textContent = '⚠ Group not found. Check the group number.';
+          err.style.display = 'block';
+          return;
+      }
+      console.log("Checking:", gNum, pin, "Against:", group.pin);
+
+      // FIX: Force both to strings and trim them for a fair comparison
+      const storedPin = String(group.pin || '').trim();
+      const enteredPin = String(pin).trim();
+
+      if (storedPin !== enteredPin) {
+          err.textContent = '⚠ Incorrect PIN. Please contact your instructor.';
+          err.style.display = 'block';
+          return;
+      }
+
+      // Success!
+      err.style.display = 'none';
       currentRole = 'student';
-      currentFaculty = null;
-      closeModal('nameModal');
-      applyRoleUI();
-      renderGrid();
-    }
+      loggedInStudentId = group.id; // Store this for filtering
+      closeModal('studentLoginModal');
+      
+      applyRoleUI(); 
+      openCardModal(group.id); // Open their specific data immediately
+      renderGrid(); // Refresh grid to only show their card
   };
 
   window.confirmFacultyName = function() {
@@ -119,6 +172,9 @@ document.addEventListener("DOMContentLoaded", () => {
     currentFaculty = null;
     document.getElementById('facultyNameInput').value = '';
     showModal('nameModal');
+    
+    // Close card modal if a student was viewing their card and logged out
+    closeModal('cardModal');
     applyRoleUI();
   };
 
@@ -126,20 +182,36 @@ document.addEventListener("DOMContentLoaded", () => {
     const badge = document.getElementById('roleBadge');
     const fc    = document.getElementById('facultyControls');
     const rl    = document.getElementById('roleLabel');
+    
+    // Elements to hide from students
+    const headerControls = document.querySelector('.header-controls');
+    const mainContent = document.querySelectorAll('.stats-bar, .filter-tabs, .grid-section');
 
     if (currentRole === 'faculty') {
       badge.textContent = `👩‍🏫 ${currentFaculty} · Switch`;
       badge.className   = 'role-badge faculty';
       fc.style.display  = 'flex';
       rl.textContent    = `Faculty view — logged in as ${currentFaculty}`;
+      
+      if(headerControls) headerControls.style.display = 'flex';
+      mainContent.forEach(el => el.style.display = ''); 
+      
     } else if (currentRole === 'student') {
       badge.textContent = '🎓 Student View · Switch';
       badge.className   = 'role-badge student';
       fc.style.display  = 'none';
       rl.textContent    = 'Student view — read only';
+      
+      // Hide the background dashboard elements
+      if(headerControls) headerControls.style.display = 'none';
+      mainContent.forEach(el => el.style.display = 'none'); 
+
     } else {
       badge.textContent = '';
       fc.style.display  = 'none';
+      
+      if(headerControls) headerControls.style.display = 'flex';
+      mainContent.forEach(el => el.style.display = '');
     }
   }
 
@@ -516,6 +588,7 @@ window.saveFacultyFeedback = async function() {
     document.getElementById('fTag').value    = '';
     document.getElementById('fStage').value  = '';
     document.getElementById('fCustomTag').value = '';
+    document.getElementById('fPin').value = '';
     document.getElementById('customTagWrap').style.display = 'none';
     document.getElementById('formErr').style.display = 'none';
     clearThumb();
@@ -530,7 +603,7 @@ window.saveFacultyFeedback = async function() {
   };
 
   window.onThumbPick = function(e) {
-    const f = e.target.files; if (!f) return;
+    const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
     r.onload = ev => {
       thumbData = ev.target.result;
@@ -555,13 +628,14 @@ window.saveFacultyFeedback = async function() {
     const de     = document.getElementById('fDesc').value.trim();
     const tgRaw  = document.getElementById('fTag').value;
     const st     = document.getElementById('fStage').value;
+    const pin    = document.getElementById('fPin').value.trim();
     const custom = document.getElementById('fCustomTag').value.trim();
     const tg     = tgRaw === 'Other' ? custom : tgRaw;
     const er     = document.getElementById('formErr');
     const btn    = document.querySelector('.btn-submit');
 
-    if (!gn || !ti || !de || !tgRaw || !st) {
-      er.textContent = '⚠ Please fill in all required fields.'; er.style.display = 'block'; return;
+    if (!gn || !ti || !de || !tgRaw || !st || !pin) {
+      er.textContent = '⚠ Please fill in all required fields, including the PIN.'; er.style.display = 'block'; return;
     }
     if (tgRaw === 'Other' && !custom) {
       er.textContent = '⚠ Please enter a custom tag name.'; er.style.display = 'block';
@@ -573,12 +647,13 @@ window.saveFacultyFeedback = async function() {
     btn.disabled = true;
 
     const newGroup = { 
-      id: gn, // Use Group Number as ID
+      id: gn, 
       groupNum: gn, 
       title: ti, 
       desc: de, 
       tag: tg, 
       stage: st, 
+      pin: pin,
       thumb: thumbData || '' 
     };
 
@@ -652,6 +727,7 @@ window.saveFacultyFeedback = async function() {
         closeModal('delModal'); 
         closeModal('cardModal'); 
         closeModal('facultyNameModal');
+        closeModal('studentLoginModal');
     }
   });
 
