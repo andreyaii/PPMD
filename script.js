@@ -5,7 +5,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // ══════════════════════════════════════════════
   const API_URL = 'https://script.google.com/macros/s/AKfycbz7pDAcJggFU5jjNZ3YYMbZoHD1Fv_s-qZdVkm8JJbikNju-gR1YWyC695KwyKKBnihgA/exec'; 
 
-  const FAV = 'cap_favorites_v1'; 
+  // CHANGE 1: Use a new storage key for favorites (v2)
+  const FAV = 'cap_favorites_v2'; 
   let groups = [];
   let ratings = {};
   let comments = {};
@@ -13,8 +14,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   try { favorites = JSON.parse(localStorage.getItem(FAV)) || {}; } catch { favorites = {}; }
 
+  // CHANGE 2: Helper function to generate unique comment IDs
+  function generateCommentId() {
+    return Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  }
+
   // Fetch data from Google Sheets on load
-// Fetch data from Google Sheets on load
   async function loadDatabase() {
     const enrolledLabel = document.getElementById('enrolledLabel');
     enrolledLabel.textContent = "Loading database from Google Sheets...";
@@ -23,7 +28,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch(API_URL);
       const data = await response.json();
       
-      // FIX: Use row[index] to get specific columns
       // row[0]=ID/GroupNum, row[1]=Title, row[2]=Desc, row[3]=Tag, row[4]=Stage, row[5]=PIN
       groups = data.projects.map(row => ({
         id: String(row[0] || 'Unknown'),          
@@ -39,13 +43,14 @@ document.addEventListener("DOMContentLoaded", () => {
       ratings = {};
       comments = {}; 
       
-      // FIX: Map feedback columns correctly
-      // row[0]=GID, row[1]=Title, row[2]=Faculty, row[3]=Rating, row[4]=Comment
+      // CHANGE 3: Map feedback with commentId (column index 6)
+      // row[0]=GID, row[1]=Title, row[2]=Faculty, row[3]=Rating, row[4]=Comment, row[5]=Timestamp, row[6]=commentId
       data.feedback.forEach(row => {
         const gid = String(row[0]);
-        const facName = String(row[2]); // Faculty is now in Column C (index 2)
-        const rating = Number(row[3]);  // Rating is now in Column D (index 3)
-        const comment = String(row[4]); // Comment is now in Column E (index 4)
+        const facName = String(row[2]);
+        const rating = Number(row[3]);
+        const comment = String(row[4]);
+        const commentId = row[6] ? String(row[6]) : generateCommentId(); // use stored ID or generate one
 
         if (!ratings[gid]) ratings[gid] = {};
         if (!ratings[gid][facName] || ratings[gid][facName] === 0) {
@@ -54,6 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!comments[gid]) comments[gid] = [];
         comments[gid].push({
+            id: commentId,      // ← store unique ID
             name: facName,
             text: comment,
             rating: rating
@@ -90,7 +96,6 @@ document.addEventListener("DOMContentLoaded", () => {
     showModal('facultyNameModal');
     setTimeout(() => document.getElementById('facultyNameInput').focus(), 300);
   } else {
-    // ADD THIS:
     showStudentLogin();
   }
 };
@@ -516,7 +521,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-window.saveFacultyFeedback = async function() {
+  // CHANGE 4: Modified saveFacultyFeedback to include commentId
+  window.saveFacultyFeedback = async function() {
     const gid = viewingGroupId;
     const g = groups.find(x => x.id === gid);
     const projectTitle = g ? g.title : "Unknown Title";
@@ -531,6 +537,9 @@ window.saveFacultyFeedback = async function() {
         return;
     }
 
+    // Generate a unique ID for this comment
+    const commentId = generateCommentId();
+
     m.textContent = "Saving...";
     m.style.color = "var(--subtext)";
     m.classList.add('show');
@@ -544,18 +553,22 @@ window.saveFacultyFeedback = async function() {
           title: projectTitle, 
           facultyName: currentFaculty,
           rating: myRating,
-          comment: text
+          comment: text,
+          commentId: commentId   // ← send the unique ID
         })
       });
 
-      // Update local UI state
+      // Update local state with the new comment and its ID
       if (!comments[gid]) comments[gid] = [];
-      comments[gid].push({ name: currentFaculty, text: text, rating: myRating });
+      comments[gid].push({ 
+        id: commentId,        // ← store ID locally
+        name: currentFaculty, 
+        text: text, 
+        rating: myRating 
+      });
 
       m.textContent = "✓ Comment Added";
       m.style.color = "#10b981";
-      
-      // CLEAR THE COMMENT BOX for the next one
       commentInput.value = '';
 
       updateStats();
@@ -567,12 +580,13 @@ window.saveFacultyFeedback = async function() {
     }
   };
 
+  // CHANGE 5: renderStudentSection now uses comment.id for favorites
   function renderStudentSection(gid) {
     const allComments = groupAllComments(gid);
-    const favName     = favorites[gid] || null;
-    const listEl      = document.getElementById('cmCommentsList');
-    const noEl        = document.getElementById('cmNoComments');
-    const favNote     = document.getElementById('cmFavNote');
+    const favoriteCommentId = favorites[gid] || null;   // ← now storing commentId
+    const listEl = document.getElementById('cmCommentsList');
+    const noEl = document.getElementById('cmNoComments');
+    const favNote = document.getElementById('cmFavNote');
 
     if (!allComments.length) {
       listEl.innerHTML = '';
@@ -580,35 +594,41 @@ window.saveFacultyFeedback = async function() {
     } else {
       noEl.style.display = 'none';
       listEl.innerHTML = allComments.map((c, idx) => {
-        const isFav = favName === c.name;
+        const isFav = favoriteCommentId === c.id;   // ← compare IDs, not names
         return `
-        <div class="comment-card${isFav ? ' fav-active' : ''}" id="ccard-${idx}">
+        <div class="comment-card${isFav ? ' fav-active' : ''}" id="ccard-${c.id}">
           <div class="comment-card-top">
             <div class="comment-anon-label">Anonymous Faculty ${idx + 1}</div>
             <div class="comment-card-stars">${starsHTML(c.rating)}</div>
           </div>
           <div class="comment-text">${c.text || '<em style="color:var(--subtext)">No comment written.</em>'}</div>
-          <button class="fav-btn${isFav ? ' fav-active' : ''}" onclick="toggleFav('${gid}','${c.name}',${idx})">
+          <button class="fav-btn${isFav ? ' fav-active' : ''}" onclick="toggleFav('${gid}','${c.id}')">
             ${isFav ? '❤️ Favorited' : '🤍 Mark as Favorite'}
           </button>
         </div>`;
       }).join('');
     }
 
-    if (favName) {
-      const idx = allComments.findIndex(c => c.name === favName);
-      favNote.innerHTML = `<div class="fav-selected-note">❤️ You favorited <strong>Anonymous Faculty ${idx + 1}'s</strong> comment.</div>`;
+    if (favoriteCommentId) {
+      const comment = allComments.find(c => c.id === favoriteCommentId);
+      if (comment) {
+        const idx = allComments.findIndex(c => c.id === favoriteCommentId);
+        favNote.innerHTML = `<div class="fav-selected-note">❤️ You favorited <strong>Anonymous Faculty ${idx + 1}'s</strong> comment.</div>`;
+      } else {
+        favNote.innerHTML = `<span style="font-size:13px;color:var(--subtext);">You haven't picked a favorite yet. Tap ❤️ on a comment to pick one.</span>`;
+      }
     } else {
       favNote.innerHTML = `<span style="font-size:13px;color:var(--subtext);">You haven't picked a favorite yet. Tap ❤️ on a comment to pick one.</span>`;
     }
   }
 
-  window.toggleFav = function(gid, facultyName, idx) {
+  // CHANGE 6: toggleFav now uses commentId instead of facultyName
+  window.toggleFav = function(gid, commentId) {
     const current = favorites[gid];
-    if (current === facultyName) {
+    if (current === commentId) {
       delete favorites[gid];
     } else {
-      favorites[gid] = facultyName;
+      favorites[gid] = commentId;
     }
     localStorage.setItem(FAV, JSON.stringify(favorites));
     renderStudentSection(gid);
