@@ -183,9 +183,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const fc    = document.getElementById('facultyControls');
     const rl    = document.getElementById('roleLabel');
     
-    // Elements to hide from students
-    const headerControls = document.querySelector('.header-controls');
-    const mainContent = document.querySelectorAll('.stats-bar, .filter-tabs, .grid-section');
+    // Target specific elements
+    const searchBox = document.querySelector('.search-box');
+    const tagFilter = document.getElementById('tagFilterWrap');
+    const statsBar  = document.querySelector('.stats-bar');
+    const filterTabs = document.querySelector('.filter-tabs');
+    const gridSection = document.querySelector('.grid-section');
 
     if (currentRole === 'faculty') {
       badge.textContent = `👩‍🏫 ${currentFaculty} · Switch`;
@@ -193,8 +196,11 @@ document.addEventListener("DOMContentLoaded", () => {
       fc.style.display  = 'flex';
       rl.textContent    = `Faculty view — logged in as ${currentFaculty}`;
       
-      if(headerControls) headerControls.style.display = 'flex';
-      mainContent.forEach(el => el.style.display = ''); 
+      if (searchBox) searchBox.style.display = '';
+      if (tagFilter) tagFilter.style.display = '';
+      if (statsBar) statsBar.style.display = '';
+      if (filterTabs) filterTabs.style.display = '';
+      if (gridSection) gridSection.style.display = ''; 
       
     } else if (currentRole === 'student') {
       badge.textContent = '🎓 Student View · Switch';
@@ -202,16 +208,24 @@ document.addEventListener("DOMContentLoaded", () => {
       fc.style.display  = 'none';
       rl.textContent    = 'Student view — read only';
       
-      // Hide the background dashboard elements
-      if(headerControls) headerControls.style.display = 'none';
-      mainContent.forEach(el => el.style.display = 'none'); 
+      // Hide search, filters, stats, and tabs for students
+      if (searchBox) searchBox.style.display = 'none';
+      if (tagFilter) tagFilter.style.display = 'none';
+      if (statsBar) statsBar.style.display = 'none';
+      if (filterTabs) filterTabs.style.display = 'none';
+      
+      // Keep the grid section visible so they can see their card!
+      if (gridSection) gridSection.style.display = '';
 
     } else {
       badge.textContent = '';
       fc.style.display  = 'none';
       
-      if(headerControls) headerControls.style.display = 'flex';
-      mainContent.forEach(el => el.style.display = '');
+      if (searchBox) searchBox.style.display = '';
+      if (tagFilter) tagFilter.style.display = '';
+      if (statsBar) statsBar.style.display = '';
+      if (filterTabs) filterTabs.style.display = '';
+      if (gridSection) gridSection.style.display = '';
     }
   }
 
@@ -311,17 +325,34 @@ document.addEventListener("DOMContentLoaded", () => {
     buildTagDropdown();
 
     let list = groups;
-    if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
-    if (activeTag   !== 'all') list = list.filter(g => g.tag   === activeTag);
-    if (query) list = list.filter(g =>
-      g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query));
-
-    const stagePart = activeStage === 'all' ? 'All Projects' : activeStage;
-    const tagPart   = activeTag   !== 'all' ? ` — ${activeTag}` : '';
-    document.getElementById('sectionLabel').textContent =
-      query ? `Results for "${query}"` : stagePart + tagPart;
-
     const grid = document.getElementById('cardGrid');
+
+    // STRICT FILTER FOR STUDENTS & CENTERING LOGIC
+    if (currentRole === 'student') {
+        list = list.filter(g => g.id === loggedInStudentId);
+        document.getElementById('sectionLabel').textContent = "My Project Proposal";
+        
+        // Center the single card using Flexbox
+        grid.style.display = 'flex';
+        grid.style.justifyContent = 'center';
+        grid.style.paddingTop = '40px'; // Breathing room from the section label
+    } else {
+        // Normal filters for faculty
+        if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
+        if (activeTag   !== 'all') list = list.filter(g => g.tag   === activeTag);
+        if (query) list = list.filter(g =>
+          g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query));
+          
+        const stagePart = activeStage === 'all' ? 'All Projects' : activeStage;
+        const tagPart   = activeTag   !== 'all' ? ` — ${activeTag}` : '';
+        document.getElementById('sectionLabel').textContent = query ? `Results for "${query}"` : stagePart + tagPart;
+        
+        // Reset grid styles for faculty multi-card view
+        grid.style.display = '';
+        grid.style.justifyContent = '';
+        grid.style.paddingTop = '';
+    }
+
     if (!list.length) {
       grid.innerHTML = `<div class="empty-state">
         <div class="empty-icon">📭</div>
@@ -340,12 +371,16 @@ document.addEventListener("DOMContentLoaded", () => {
     grid.innerHTML = pageList.map((g, i) => cardHTML(g, start + i)).join('');
 
     pageList.forEach(g => {
-      // Use querySelector to safely select IDs that might have spaces
       const el = document.querySelector(`[id="card-${g.id}"]`);
       if (el) el.addEventListener('click', () => openCardModal(g.id));
     });
 
-    renderPagination(list.length, totalPages);
+    // Hide pagination for students since they only have one card
+    if (currentRole === 'student') {
+        document.getElementById('pagination').style.display = 'none';
+    } else {
+        renderPagination(list.length, totalPages);
+    }
   }
 
   function cardHTML(g, i) {
