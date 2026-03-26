@@ -3,185 +3,282 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>PPMD</title>
-<link rel="icon" type="image/png" href="res/logo.png">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="style.css">
+<title>PPMD — Project Proposal Monitoring Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Figtree:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="style.css"/>
 </head>
-
 <body>
 
-<!-- HEADER -->
-<header>
-  <div class="header-inner">
-    <div class="header-brand">
-      <div class="header-logo">🎓</div>
-      <div>
-        <div class="header-title">Project Proposal Monitoring Dashboard</div>
-        <div class="header-subtitle">Track and manage student project proposals</div>
+<!-- ══════════════════════════════════
+     ROLE SELECTION OVERLAY
+══════════════════════════════════ -->
+<div class="overlay open" id="roleOverlay">
+  <div class="role-card">
+    <div class="role-card-glow"></div>
+    <div class="role-card-inner">
+      <div class="role-logo">
+        <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="24" fill="url(#lg)"/><defs><linearGradient id="lg" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs><path d="M16 32c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/><circle cx="24" cy="19" r="4" fill="#fff"/></svg>
+      </div>
+      <h1 class="role-title">PPMD</h1>
+      <p class="role-subtitle">Project Proposal Monitoring Dashboard</p>
+      <div class="role-divider"></div>
+      <p class="role-prompt">Choose your role to continue</p>
+      <div class="role-options">
+        <button class="role-opt faculty-opt" onclick="chooseRole('faculty')">
+          <span class="role-opt-icon">👩‍🏫</span>
+          <span class="role-opt-label">Faculty</span>
+          <span class="role-opt-desc">Rate &amp; review proposals</span>
+        </button>
+        <button class="role-opt student-opt" onclick="chooseRole('student')">
+          <span class="role-opt-icon">🎓</span>
+          <span class="role-opt-label">Student</span>
+          <span class="role-opt-desc">View feedback &amp; ratings</span>
+        </button>
       </div>
     </div>
-    <div class="header-controls">
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="searchInput" placeholder="Search by title or group no…"/>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     FACULTY NAME MODAL
+══════════════════════════════════ -->
+<div class="overlay" id="nameOverlay">
+  <div class="modal-box" style="max-width:400px">
+    <div class="modal-box-header">
+      <span class="modal-box-icon">👩‍🏫</span>
+      <h2 class="modal-box-title">Your Name</h2>
+      <p class="modal-box-sub">Used to track your reviews</p>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Full Name <span class="req">*</span></label>
+      <input class="field-input" id="nameInput" placeholder="e.g. Dr. Maria Santos" maxlength="60"/>
+      <span class="field-err" id="nameErr"></span>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-ghost" onclick="back()">← Back</button>
+      <button class="btn-solid" onclick="confirmName()">Continue →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     HEADER
+══════════════════════════════════ -->
+<header id="appHeader" class="hidden">
+  <div class="header-wrap">
+    <div class="header-brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="16" fill="url(#bm)"/><defs><linearGradient id="bm" x1="0" y1="0" x2="32" y2="32"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs><path d="M10 22c0-3.314 2.686-6 6-6s6 2.686 6 6" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="13" r="3" fill="#fff"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">PPMD</div>
+        <div class="brand-sub" id="roleLabel">—</div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="search-wrap">
+        <svg class="search-ico" viewBox="0 0 20 20" fill="none"><circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <input type="text" id="searchInput" class="search-input" placeholder="Search title or group…"/>
       </div>
 
-      <!-- TAG FILTER DROPDOWN — options built dynamically from groups data -->
-      <div class="tag-filter-wrap" id="tagFilterWrap">
-        <button class="tag-filter-btn" id="tagFilterBtn" onclick="toggleTagDropdown()">
-          <span id="tagFilterLabel">🏷 All Tags</span>
-          <span class="tag-filter-arrow" id="tagArrow">▾</span>
+      <div class="tag-wrap" id="tagWrap">
+        <button class="chip-btn" id="tagBtn" onclick="toggleTagMenu()">
+          <svg viewBox="0 0 16 16" fill="none" width="13"><path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span id="tagLabel">All Tags</span>
+          <span class="chip-caret">▾</span>
         </button>
-        <div class="tag-dropdown" id="tagDropdown">
-          <!-- populated by buildTagDropdown() in script.js -->
-        </div>
+        <div class="tag-menu" id="tagMenu"></div>
       </div>
 
-      <button class="btn-primary" onclick="openAddModal()">＋ Add Group</button>
+      <div id="facControls" class="fac-controls hidden">
+        <button class="btn-solid" onclick="openAddModal()">＋ Add Group</button>
+        <input type="file" id="xlsxUp" accept=".xlsx,.xls" style="display:none"/>
+        <button class="btn-outline" onclick="document.getElementById('xlsxUp').click()">📥 Import</button>
+        <button class="btn-outline" onclick="exportXLSX()">📤 Export</button>
+      </div>
 
-      <!-- DARK MODE TOGGLE -->
-      <button class="dark-toggle" id="darkToggle" onclick="toggleDarkMode()" title="Toggle dark mode">
-        <span class="dark-toggle-icon" id="darkIcon">🌙</span>
-      </button>
+      <button class="role-switcher" id="roleSwitcher" onclick="switchRole()"></button>
+      <button class="dark-btn" id="darkBtn" onclick="toggleDark()" title="Toggle dark mode">🌙</button>
     </div>
   </div>
 </header>
 
-<!-- STATS BAR -->
-<div class="stats-bar">
-  <div class="stats-bar-left">
-    <h2>All Projects</h2>
-    <p id="enrolledLabel">AY 2026–2027 · 0 groups enrolled</p>
-  </div>
-  <div class="stats-chips">
-    <div class="stat-chip"><span class="stat-chip-dot" style="background:#4f46e5"></span><span>Total Groups</span><span class="stat-chip-num" id="statTotal">0</span></div>
-    <div class="stat-chip"><span class="stat-chip-dot" style="background:#10b981"></span><span>Rated</span><span class="stat-chip-num" id="statRated">0</span></div>
-    <div class="stat-chip"><span class="stat-chip-dot" style="background:#6b7280"></span><span>Unrated</span><span class="stat-chip-num" id="statUnrated">0</span></div>
-  </div>
-</div>
-
-<!-- STAGE FILTER TABS — fixed: All Groups | Capstone 1 | Software Engineering 1 -->
-<div class="filter-tabs">
-  <button class="filter-tab active" data-stage="all"                   onclick="setStage('all')">All Groups</button>
-  <button class="filter-tab"        data-stage="Capstone 1"            onclick="setStage('Capstone 1')">Capstone 1</button>
-  <button class="filter-tab"        data-stage="Software Engineering 1" onclick="setStage('Software Engineering 1')">Software Engineering 1</button>
-</div>
-
-<!-- GRID -->
-<div class="grid-section">
-  <div class="section-label" id="sectionLabel">All Projects</div>
-  <div class="grid" id="cardGrid"></div>
-
-  <!-- PAGINATION -->
-  <div class="pagination" id="pagination" style="display:none">
-    <div class="pagination-info" id="paginationInfo"></div>
-    <div class="pagination-controls">
-      <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled>← Prev</button>
-      <div class="page-numbers" id="pageNumbers"></div>
-      <button class="page-btn" id="nextBtn" onclick="changePage(1)">Next →</button>
-    </div>
-  </div>
-</div>
-
-<!-- ADD GROUP MODAL -->
-<div class="modal-overlay" id="addModal" onclick="overlayClick(event,'addModal')">
-  <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title">➕ Add New Group</div>
-      <button class="modal-close" onclick="closeModal('addModal')">✕</button>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Thumbnail Image</label>
-      <div class="thumb-upload" id="uploadArea">
-        <input type="file" id="thumbFile" accept="image/*" onchange="onThumbPick(event)"/>
-        <div class="thumb-upload-icon">🖼️</div>
-        <div class="thumb-upload-text"><strong>Click to upload</strong> or drag &amp; drop
-<span style="font-size:11px;display:block;margin-top:4px;">PNG, JPG, WEBP — any size</span></div>
+<!-- ══════════════════════════════════
+     STATS + FILTER
+══════════════════════════════════ -->
+<div id="appBody" class="hidden">
+  <section class="stats-section">
+    <div class="stats-wrap">
+      <div class="stats-left">
+        <h2 class="stats-heading">All Projects</h2>
+        <p class="stats-meta" id="statsEnrolled">AY 2026–2027 · 0 groups enrolled</p>
       </div>
-      <img id="thumbPreview" class="thumb-preview" alt="Preview"/>
-      <button class="thumb-remove" id="removeThumbBtn" style="display:none" onclick="clearThumb()">✕ Remove image</button>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label">Group Number<span>*</span></label>
-        <input class="form-input" id="fGroupNum" placeholder="e.g. G-01"/>
+      <div class="stats-chips">
+        <div class="s-chip total"><span class="s-num" id="stTotal">0</span><span class="s-lbl">Total</span></div>
+        <div class="s-chip rated"><span class="s-num" id="stRated">0</span><span class="s-lbl">Rated</span></div>
+        <div class="s-chip unrated"><span class="s-num" id="stUnrated">0</span><span class="s-lbl">Unrated</span></div>
       </div>
-      <div class="form-group" style="margin-bottom:0">
-        <label class="form-label">Tag / Category<span>*</span></label>
-        <select class="form-select" id="fTag" onchange="handleTagChange()">
-          <option value="">Select tag…</option>
-          <option>AI/ML</option><option>IoT</option><option>Mobile</option>
-          <option>Web</option><option>Blockchain</option><option>Data Sci</option>
-          <option>CV</option><option>NLP</option><option>Health</option>
-          <option>EdTech</option><option>Transport</option><option>Drones</option>
-          <option value="Other">Other (custom)</option>
-        </select>
-        <div id="customTagWrap" style="display:none; margin-top:8px;">
-          <input class="form-input" id="fCustomTag" placeholder="Type your custom tag…" maxlength="24"/>
+    </div>
+  </section>
+
+  <nav class="tabs-nav">
+    <div class="tabs-wrap">
+      <button class="tab active" data-stage="all" onclick="setStage('all')">All Groups</button>
+      <button class="tab" data-stage="Capstone 1" onclick="setStage('Capstone 1')">Capstone 1</button>
+      <button class="tab" data-stage="Software Engineering 1" onclick="setStage('Software Engineering 1')">Software Engineering 1</button>
+    </div>
+  </nav>
+
+  <main class="main-area">
+    <!-- Loading state -->
+    <div class="loading-state" id="loadingState">
+      <div class="spinner"></div>
+      <p>Fetching project data…</p>
+    </div>
+
+    <!-- Error state -->
+    <div class="error-state hidden" id="errorState">
+      <div class="error-icon">⚠️</div>
+      <h3>Could not load data</h3>
+      <p id="errorMsg">Check your Apps Script URL in config.</p>
+      <button class="btn-solid" style="margin-top:16px" onclick="loadData()">Retry</button>
+    </div>
+
+    <div class="section-head" id="sectionHead" style="display:none">
+      <span class="section-lbl" id="sectionLbl">All Projects</span>
+    </div>
+
+    <div class="grid" id="cardGrid"></div>
+
+    <div class="pagination" id="pagination" style="display:none">
+      <div class="page-info" id="pageInfo"></div>
+      <div class="page-controls">
+        <button class="pg-btn" id="pgPrev" onclick="changePage(-1)">← Prev</button>
+        <div class="pg-nums" id="pgNums"></div>
+        <button class="pg-btn" id="pgNext" onclick="changePage(1)">Next →</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ══════════════════════════════════
+     CARD DETAIL MODAL
+══════════════════════════════════ -->
+<div class="overlay" id="cardOverlay" onclick="overlayClick(event,'cardOverlay')">
+  <div class="modal-box card-modal-box">
+    <button class="modal-x" onclick="closeOverlay('cardOverlay')">✕</button>
+
+    <div class="cm-hero">
+      <img id="cmHeroImg" src="" alt=""/>
+      <div class="cm-hero-badge" id="cmHeroBadge">—</div>
+    </div>
+
+    <div class="cm-body">
+      <div class="cm-meta">
+        <span class="cm-group" id="cmGroup">—</span>
+        <span class="cm-stage-pill" id="cmStagePill">—</span>
+      </div>
+      <h2 class="cm-title" id="cmTitle">—</h2>
+      <p class="cm-desc" id="cmDesc">—</p>
+
+      <div class="cm-rule"></div>
+
+      <!-- Overall Average -->
+      <div class="cm-block">
+        <div class="cm-block-label">⭐ Overall Rating</div>
+        <div class="cm-avg-row">
+          <div class="star-row-disp" id="cmAvgStars"></div>
+          <span class="cm-avg-val" id="cmAvgVal">No ratings yet</span>
+        </div>
+      </div>
+
+      <!-- FACULTY PANEL -->
+      <div id="facPanel" class="hidden">
+        <div class="cm-rule"></div>
+        <div class="cm-block">
+          <div class="cm-block-label">✏️ Your Rating &amp; Comment</div>
+          <div class="star-row-input" id="cmStarInput">
+            <span class="si" data-v="1">★</span>
+            <span class="si" data-v="2">★</span>
+            <span class="si" data-v="3">★</span>
+            <span class="si" data-v="4">★</span>
+            <span class="si" data-v="5">★</span>
+          </div>
+          <div class="fac-rating-note" id="facRatingNote"></div>
+          <textarea class="field-textarea" id="cmCommentIn" placeholder="Write your feedback on this proposal…"></textarea>
+          <div class="save-row">
+            <button class="btn-solid" onclick="submitFacultyFeedback()">Save Feedback</button>
+            <span class="saved-toast" id="savedToast">✓ Saved!</span>
+          </div>
+          <div class="cm-rule" style="margin-top:16px"></div>
+          <div class="cm-block-label">📋 My Previous Comments</div>
+          <div id="myComments" class="my-comments-list"></div>
+        </div>
+      </div>
+
+      <!-- STUDENT PANEL -->
+      <div id="stuPanel" class="hidden">
+        <div class="cm-rule"></div>
+        <div class="cm-block">
+          <div class="cm-block-label">💬 Faculty Feedback <span class="anon-note">(anonymous)</span></div>
+          <div id="stuCommentsList" class="stu-comments"></div>
+          <p id="stuNoComments" class="no-comments hidden">No comments yet.</p>
+        </div>
+        <div class="cm-rule"></div>
+        <div class="cm-block">
+          <div class="cm-block-label">❤️ My Favorite <span class="anon-note">(potential advisor)</span></div>
+          <div id="stuFavNote" class="fav-note-box">You haven't picked a favorite yet.</div>
         </div>
       </div>
     </div>
-    <div class="form-group" style="margin-top:18px">
-      <label class="form-label">Stage<span>*</span></label>
-      <select class="form-select" id="fStage">
-        <option value="">Select stage…</option>
-        <option>Capstone 1</option>
-        <option>Software Engineering 1</option>
-      </select>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     ADD GROUP MODAL
+══════════════════════════════════ -->
+<div class="overlay" id="addOverlay" onclick="overlayClick(event,'addOverlay')">
+  <div class="modal-box" style="max-width:540px">
+    <div class="modal-box-header">
+      <span class="modal-box-icon">➕</span>
+      <h2 class="modal-box-title">Add New Group</h2>
+      <p class="modal-box-sub">New groups are added directly in Google Sheets</p>
     </div>
-    <div class="form-group">
-      <label class="form-label">Project Title<span>*</span></label>
-      <input class="form-input" id="fTitle" placeholder="Enter project title"/>
+    <div class="info-banner">
+      <div class="info-banner-icon">📊</div>
+      <div>
+        <strong>How to add groups</strong>
+        <p>Open your Google Sheets "Groups" tab and add a new row with: GroupID, Title, Description, Tag, Stage. Then click <strong>Refresh</strong> below to load the new data.</p>
+      </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Description<span>*</span></label>
-      <textarea class="form-textarea" id="fDesc" placeholder="Describe the project proposal…"></textarea>
-    </div>
-    <p class="form-error" id="formErr"></p>
-    <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeModal('addModal')">Cancel</button>
-      <button class="btn-submit" onclick="submitGroup()">Add Group</button>
+    <div class="modal-foot" style="margin-top:24px">
+      <button class="btn-ghost" onclick="closeOverlay('addOverlay')">Close</button>
+      <button class="btn-solid" onclick="loadData();closeOverlay('addOverlay')">🔄 Refresh Data</button>
     </div>
   </div>
 </div>
 
-<!-- DELETE CONFIRM MODAL -->
-<div class="modal-overlay" id="delModal" onclick="overlayClick(event,'delModal')">
-  <div class="confirm-modal">
-    <div class="confirm-icon">🗑️</div>
-    <div class="confirm-title">Delete Proposal?</div>
-    <div class="confirm-msg">This will permanently remove the group and all its ratings and comments. This cannot be undone.</div>
-    <div class="confirm-actions">
-      <button class="btn-conf-cancel" onclick="closeModal('delModal')">Cancel</button>
-      <button class="btn-conf-delete" onclick="confirmDelete()">Yes, Delete</button>
-    </div>
-  </div>
+<!-- CONFIG BANNER (shown if URL not set) -->
+<div class="config-banner hidden" id="configBanner">
+  <strong>⚙️ Setup required:</strong> Open <code>script.js</code> and set <code>APPS_SCRIPT_URL</code> to your deployed Web App URL.
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="script.js"></script>
-
 <script>
-  // ── DARK MODE ──
-  const DARK_KEY = 'ppmd_dark_mode';
-
-  function applyDark(isDark) {
-    document.documentElement.classList.toggle('dark', isDark);
-    document.getElementById('darkIcon').textContent = isDark ? '☀️' : '🌙';
-    document.getElementById('darkToggle').classList.toggle('active', isDark);
+  const DK = 'ppmd_dark';
+  const applyDark = d => {
+    document.documentElement.classList.toggle('dark', d);
+    document.getElementById('darkBtn').textContent = d ? '☀️' : '🌙';
+  };
+  function toggleDark() {
+    const d = !document.documentElement.classList.contains('dark');
+    localStorage.setItem(DK, d);
+    applyDark(d);
   }
-
-  function toggleDarkMode() {
-    const isDark = !document.documentElement.classList.contains('dark');
-    localStorage.setItem(DARK_KEY, isDark);
-    applyDark(isDark);
-  }
-
-  // Restore preference on load
-  applyDark(localStorage.getItem(DARK_KEY) === 'true');
+  applyDark(localStorage.getItem(DK) === 'true');
 </script>
-
 </body>
 </html>

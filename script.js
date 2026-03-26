@@ -1,181 +1,298 @@
+// ══════════════════════════════════════════════════════════════
+//  PPMD — script.js
+//  Google Apps Script-backed Project Proposal Monitoring Dashboard
+// ══════════════════════════════════════════════════════════════
+
+// ▼▼▼ SET THIS TO YOUR DEPLOYED WEB APP URL ▼▼▼
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbys9fcx53NC_ATgpcyvJGqJlQkWLScohQg_N4Sz2RfSJ1O-lGGXTcFkG-lv6YT7qXFWKA/exec";
+// ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
 document.addEventListener("DOMContentLoaded", () => {
-  // ── PERSISTENCE KEYS ──
-  const GK = 'cap_groups_v3', RK = 'cap_ratings_v3', CK = 'cap_comments_v3';
 
-  // ── DATA LOADING ──
-  const load = k => {
-    try { return JSON.parse(localStorage.getItem(k)) || null; }
-    catch(e) { return null; }
-  };
-  const persist = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+  // ══════════════════════════════════════════════
+  // STATE
+  // ══════════════════════════════════════════════
+  const FAV_KEY = "ppmd_fav_v1"; // localStorage only — student favorites
 
-  let groups   = load(GK) || [];
-  let ratings  = load(RK) || {};
-  let comments = load(CK) || {};
+  let groups    = [];   // from Apps Script
+  let rcData    = [];   // ratings & comments from Apps Script
 
-  // ── STATE ──
-  let activeStage = 'all';   // controls the tab filter (All / Capstone 1 / SE1)
-  let activeTag   = 'all';   // controls the dropdown tag filter
-  let query       = '';
+  let currentRole    = null;
+  let currentFaculty = null;
+  let viewingGroupId = null;
+  let pendingStarVal = 0;
+
+  let activeStage = "all";
+  let activeTag   = "all";
+  let query       = "";
   let currentPage = 1;
-  const PAGE_SIZE = 10;
-  let pendingDel  = null;
-  let thumbData   = null;
+  const PAGE_SIZE = 12;
 
-// Helper to find data regardless of column name casing (e.g., "title" vs "Title")
-function getCellValue(row, variations) {
-  const key = Object.keys(row).find(k => 
-    variations.some(v => k.toLowerCase().trim() === v.toLowerCase())
-  );
-  return key ? row[key] : null;
-}
+  let favorites = loadLocal(FAV_KEY) || {};
 
-// UNIQUE ID
-async function fetchGroups() {
-  const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTsuxgyDT3wSPVxstsNG3RZhYSYYwcEEfp3lQgoqwWYTSf4co7p8NUdg9v-WPW0mIbIF9MDcVhRaoYR/pub?output=csv';
+  // ══════════════════════════════════════════════
+  // LOCAL STORAGE HELPERS (for favorites only)
+  // ══════════════════════════════════════════════
+  function loadLocal(k) {
+    try { return JSON.parse(localStorage.getItem(k)) || null; } catch { return null; }
+  }
+  function saveLocal(k, v) { localStorage.setItem(k, JSON.stringify(v)); }
 
-  try {
-    console.log("Fetching data from Google Sheets...");
-    const res = await fetch(SHEET_URL);
-    
-    if (!res.ok) throw new Error("Could not fetch sheet. Make sure it is Published to Web as CSV.");
-    
-    const text = await res.text();
-    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
-    const data = parsed.data;
+  // ══════════════════════════════════════════════
+  // CONFIG CHECK
+  // ══════════════════════════════════════════════
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE") {
+    document.getElementById("configBanner").classList.remove("hidden");
+  }
 
-    if (data.length === 0) {
-      console.warn("Sheet is empty or headers don't match.");
-    }
-
-    // Map data with flexible header names
-    const sheetGroups = data.map((row, i) => {
-      const gNum = getCellValue(row, ["Group Number", "Group No", "Group", "group"]) || "N/A";
-      return {
-        // Use Group Number + Title as ID so it's unique but persistent
-        id: "sheet-" + gNum.toString().replace(/\s+/g, '-'),
-        groupNum: gNum,
-        title: getCellValue(row, ["Title", "Project Title", "Project"]) || "Untitled Project",
-        desc:  getCellValue(row, ["Description", "Desc", "Abstract"]) || "No description.",
-        tag:   getCellValue(row, ["Tag", "Category", "Type"]) || "Other",
-        stage: getCellValue(row, ["Stage", "Status", "Year"]) || "Capstone 1",
-        thumb: null
-      };
-    });
-
-    // Save to global variable
-    groups = sheetGroups;
-    
-    // Save a backup to local storage
-    localStorage.setItem('cap_groups_v3', JSON.stringify(groups));
-    
-    console.log("Successfully loaded " + groups.length + " groups.");
-    renderGrid();
-
-  } catch (e) {
-    console.error("Error loading Google Sheet:", e);
-    // If it fails, try to load from the last successful cache
-    const cached = localStorage.getItem('cap_groups_v3');
-    if (cached) {
-      groups = JSON.parse(cached);
-      renderGrid();
+  // ══════════════════════════════════════════════
+  // ROLE SELECTION
+  // ══════════════════════════════════════════════
+  window.chooseRole = function(role) {
+    if (role === "faculty") {
+      closeOverlay("roleOverlay");
+      openOverlay("nameOverlay");
+      setTimeout(() => document.getElementById("nameInput").focus(), 300);
     } else {
-      document.getElementById('cardGrid').innerHTML = `<p style="color:red; text-align:center;">Failed to load data. Please check your internet or Google Sheet settings.</p>`;
+      currentRole    = "student";
+      currentFaculty = null;
+      closeOverlay("roleOverlay");
+      activateApp();
+    }
+  };
+
+  window.back = function() {
+    closeOverlay("nameOverlay");
+    openOverlay("roleOverlay");
+  };
+
+  window.confirmName = function() {
+    const name = document.getElementById("nameInput").value.trim();
+    const err  = document.getElementById("nameErr");
+    if (!name) { err.textContent = "⚠ Please enter your name."; return; }
+    err.textContent = "";
+    currentRole    = "faculty";
+    currentFaculty = name;
+    closeOverlay("nameOverlay");
+    activateApp();
+  };
+
+  window.switchRole = function() {
+    currentRole    = null;
+    currentFaculty = null;
+    document.getElementById("nameInput").value = "";
+    document.getElementById("nameErr").textContent = "";
+    openOverlay("roleOverlay");
+    document.getElementById("appHeader").classList.add("hidden");
+    document.getElementById("appBody").classList.add("hidden");
+  };
+
+  function activateApp() {
+    applyRoleUI();
+    document.getElementById("appHeader").classList.remove("hidden");
+    document.getElementById("appBody").classList.remove("hidden");
+    loadData();
+  }
+
+  function applyRoleUI() {
+    const isFac   = currentRole === "faculty";
+    const rl      = document.getElementById("roleLabel");
+    const sw      = document.getElementById("roleSwitcher");
+    const fc      = document.getElementById("facControls");
+
+    if (currentRole === "faculty") {
+      rl.textContent = `Faculty — ${currentFaculty}`;
+      sw.textContent = `👩‍🏫 ${currentFaculty} · Switch`;
+      sw.className   = "role-switcher fac";
+      fc.classList.remove("hidden");
+    } else {
+      rl.textContent = "Student View — read only";
+      sw.textContent = "🎓 Student · Switch";
+      sw.className   = "role-switcher stu";
+      fc.classList.add("hidden");
     }
   }
-}
 
-// Update the Init function
-document.addEventListener("DOMContentLoaded", () => {
-  // Load ratings/comments first
-  ratings = JSON.parse(localStorage.getItem('cap_ratings_v3')) || {};
-  comments = JSON.parse(localStorage.getItem('cap_comments_v3')) || {};
+  // ══════════════════════════════════════════════
+  // DATA LOADING
+  // ══════════════════════════════════════════════
+  window.loadData = async function() {
+    if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === "YOUR_APPS_SCRIPT_WEB_APP_URL_HERE") {
+      showError("Apps Script URL not configured. Please set APPS_SCRIPT_URL in script.js.");
+      return;
+    }
 
-  // Trigger the live fetch
-  fetchGroups();
-});
+    showLoading();
+    try {
+      const res  = await fetch(APPS_SCRIPT_URL);
+      const data = await res.json();
+      if (data.status !== "ok") throw new Error(data.message || "API error");
 
-// ── MODIFIED SUBMIT GROUP (for local additions) ──
-window.submitGroup = function() {
-    // ... (keep your validation logic)
-    
-    const newGroup = {
-      id:       'manual_' + Date.now(), // Prefix to distinguish from sheet groups
-      groupNum: gn,
-      title:    ti,
-      desc:     de,
-      tag:      tg,
-      stage:    st,
-      thumb:    thumbData || null
-    };
+      groups = data.groups  || [];
+      rcData = data.comments || [];
 
-    groups.push(newGroup);
-    // We save the WHOLE groups array so manual ones persist after refresh
-    localStorage.setItem(GK, JSON.stringify(groups)); 
-    
-    closeModal('addModal');
-    renderGrid();
-};
-
-  // ── UPDATED EXCEL UPLOAD ──
-function handleExcelUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(event) {
-    const data = new Uint8Array(event.target.result);
-    const workbook = XLSX.read(data, { type: 'array' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData = XLSX.utils.sheet_to_json(sheet);
-    
-    importExcelData(jsonData);
-    e.target.value = '';
+      hideLoading();
+      renderGrid();
+    } catch (err) {
+      showError("Failed to load data: " + err.message);
+    }
   };
-  reader.readAsArrayBuffer(file);
-}
 
-function importExcelData(data) {
-  if (!data.length) return;
+  function showLoading() {
+    document.getElementById("loadingState").classList.remove("hidden");
+    document.getElementById("errorState").classList.add("hidden");
+    document.getElementById("sectionHead").style.display = "none";
+    document.getElementById("cardGrid").innerHTML = "";
+    document.getElementById("pagination").style.display = "none";
+  }
 
-  let addedCount = 0;
+  function hideLoading() {
+    document.getElementById("loadingState").classList.add("hidden");
+    document.getElementById("sectionHead").style.display = "flex";
+  }
 
-  data.forEach((row) => {
-    // 1. Clean the Group Number to use as a Unique ID
-    const rawGroupNum = row["Group Number"] || row["group"] || "N/A";
-    const cleanId = rawGroupNum.toString().trim().replace(/\s+/g, '-');
+  function showError(msg) {
+    document.getElementById("loadingState").classList.add("hidden");
+    document.getElementById("errorState").classList.remove("hidden");
+    document.getElementById("errorMsg").textContent = msg;
+  }
 
-    // 2. Check if this group already exists (prevent duplicates)
-    const exists = groups.some(g => g.id === cleanId);
-    
-    if (!exists) {
-      groups.push({
-        id:       cleanId, // Consistent ID for ratings
-        groupNum: rawGroupNum,
-        title:    row["Title"]        || row["title"]       || "Untitled Project",
-        desc:     row["Description"]  || row["desc"]        || "No description provided.",
-        tag:      row["Tag"]          || row["tag"]         || "Other",
-        stage:    row["Stage"]        || row["stage"]       || "Capstone 1",
-        thumb:    null
-      });
-      addedCount++;
+  // ══════════════════════════════════════════════
+  // DATA HELPERS
+  // ══════════════════════════════════════════════
+  function avgRating(gid) {
+    const rows = rcData.filter(r => r.groupId === gid && r.rating !== null && r.rating !== "");
+    if (!rows.length) return 0;
+    return rows.reduce((s, r) => s + Number(r.rating), 0) / rows.length;
+  }
+
+  function allComments(gid) {
+    return rcData.filter(r => r.groupId === gid && r.comment && r.comment.trim());
+  }
+
+  function myRating(gid) {
+    const row = rcData.find(r => r.groupId === gid && r.faculty === currentFaculty && r.rating !== null && r.rating !== "");
+    return row ? Number(row.rating) : 0;
+  }
+
+  function myComments(gid) {
+    return rcData.filter(r => r.groupId === gid && r.faculty === currentFaculty && r.comment && r.comment.trim());
+  }
+
+  // ══════════════════════════════════════════════
+  // SEARCH & FILTER WIRING
+  // ══════════════════════════════════════════════
+  document.getElementById("searchInput").addEventListener("input", function() {
+    query = this.value.trim().toLowerCase();
+    currentPage = 1;
+    renderGrid();
+  });
+
+  window.setStage = function(stage) {
+    activeStage = stage;
+    currentPage = 1;
+    document.querySelectorAll(".tab").forEach(b =>
+      b.classList.toggle("active", b.dataset.stage === stage));
+    renderGrid();
+  };
+
+  window.toggleTagMenu = function() {
+    document.getElementById("tagBtn").classList.toggle("open");
+    document.getElementById("tagMenu").classList.toggle("open");
+  };
+
+  document.addEventListener("click", e => {
+    if (!e.target.closest("#tagWrap")) {
+      document.getElementById("tagBtn").classList.remove("open");
+      document.getElementById("tagMenu").classList.remove("open");
     }
   });
 
-  // 3. Persist the combined list (Google Sheet + Manual + Excel)
-  localStorage.setItem(GK, JSON.stringify(groups));
-  
-  renderGrid();
-  alert(`✅ Processed ${data.length} rows. Added ${addedCount} new groups.`);
-}
+  function buildTagMenu() {
+    const used = [...new Set(groups.map(g => g.tag).filter(Boolean))].sort();
+    const menu = document.getElementById("tagMenu");
+    menu.innerHTML = [
+      `<button class="tag-item${activeTag === "all" ? " active" : ""}" onclick="setTagFilter('all')">🏷 All Tags</button>`,
+      ...used.map(t => `<button class="tag-item${activeTag === t ? " active" : ""}" onclick="setTagFilter('${t.replace(/'/g, "\\'")}')">${t}</button>`)
+    ].join("");
+    if (!used.length) menu.innerHTML += `<span style="display:block;padding:10px 16px;font-size:12px;color:var(--sub)">No tags yet</span>`;
+  }
 
-  // ── FALLBACK SVG THUMBS ──
-  const TC = [['#eef2ff','#c7d2fe'],['#d1fae5','#a7f3d0'],['#fef3c7','#fde68a'],
-              ['#fee2e2','#fecaca'],['#ede9fe','#ddd6fe'],['#fce7f3','#fbcfe8'],['#dbeafe','#bfdbfe']];
-  const TI = ['💡','📊','🖥️','🔬','🌐','📱','🤖','🔧','📡','🛰️','🧬','🗺️'];
+  window.setTagFilter = function(tag) {
+    activeTag = tag;
+    document.getElementById("tagLabel").textContent = tag === "all" ? "All Tags" : tag;
+    document.getElementById("tagBtn").classList.toggle("active-f", tag !== "all");
+    document.getElementById("tagBtn").classList.remove("open");
+    document.getElementById("tagMenu").classList.remove("open");
+    currentPage = 1;
+    renderGrid();
+  };
+
+  // ══════════════════════════════════════════════
+  // RENDER GRID
+  // ══════════════════════════════════════════════
+  function updateStats() {
+    const total = groups.length;
+    const rated = groups.filter(g => avgRating(g.groupId) > 0).length;
+    document.getElementById("stTotal").textContent   = total;
+    document.getElementById("stRated").textContent   = rated;
+    document.getElementById("stUnrated").textContent = total - rated;
+    document.getElementById("statsEnrolled").textContent =
+      `AY 2026–2027 · ${total} group${total !== 1 ? "s" : ""} enrolled`;
+  }
+
+  function renderGrid() {
+    updateStats();
+    buildTagMenu();
+
+    let list = groups;
+    if (activeStage !== "all") list = list.filter(g => g.stage === activeStage);
+    if (activeTag   !== "all") list = list.filter(g => g.tag   === activeTag);
+    if (query) list = list.filter(g =>
+      g.title.toLowerCase().includes(query) || (g.groupId || "").toLowerCase().includes(query));
+
+    const stagePart = activeStage === "all" ? "All Projects" : activeStage;
+    const tagPart   = activeTag   !== "all" ? ` — ${activeTag}` : "";
+    document.getElementById("sectionLbl").textContent =
+      query ? `Results for "${query}"` : stagePart + tagPart;
+
+    const grid = document.getElementById("cardGrid");
+
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h3>${groups.length ? "No results found" : "No groups yet"}</h3>
+        <p>${groups.length ? "Try a different search or filter." : "Add rows to the Groups sheet and refresh."}</p>
+      </div>`;
+      document.getElementById("pagination").style.display = "none";
+      return;
+    }
+
+    const totalPages = Math.ceil(list.length / PAGE_SIZE);
+    if (currentPage > totalPages) currentPage = totalPages;
+    const start    = (currentPage - 1) * PAGE_SIZE;
+    const pageList = list.slice(start, start + PAGE_SIZE);
+
+    grid.innerHTML = pageList.map((g, i) => cardHTML(g, start + i)).join("");
+
+    pageList.forEach(g => {
+      const el = document.getElementById("card-" + g.groupId);
+      if (el) el.addEventListener("click", () => openCardModal(g.groupId));
+    });
+
+    renderPagination(list.length, totalPages);
+  }
+
+  // ══════════════════════════════════════════════
+  // SVG FALLBACK THUMBS
+  // ══════════════════════════════════════════════
+  const TC = [["#eef2ff","#c7d2fe"],["#d1fae5","#a7f3d0"],["#fef3c7","#fde68a"],
+              ["#fee2e2","#fecaca"],["#ede9fe","#ddd6fe"],["#fce7f3","#fbcfe8"],["#dbeafe","#bfdbfe"]];
+  const TI = ["💡","📊","🖥️","🔬","🌐","📱","🤖","🔧","📡","🛰️","🧬","🗺️"];
 
   function svgThumb(i) {
-    const [c1, c2] = TC[i % TC.length], ic = TI[i % TI.length], uid = 'svg_' + i;
-    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    const [c1, c2] = TC[i % TC.length], ic = TI[i % TI.length], uid = "sv" + i;
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 202">
         <defs><linearGradient id="${uid}" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" style="stop-color:${c1}"/>
@@ -186,420 +303,313 @@ function importExcelData(data) {
       </svg>`);
   }
 
-  // ── SEARCH ──
-  document.getElementById('searchInput').addEventListener('input', function() {
-    query = this.value.trim().toLowerCase();
-    currentPage = 1;
-    renderGrid();
-  });
-
-  // ── STAGE TABS ──
-  window.setStage = function(stage) {
-    activeStage = stage;
-    currentPage = 1;
-    document.querySelectorAll('.filter-tab').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.stage === stage);
-    });
-    renderGrid();
-  };
-
-  // ── TAG DROPDOWN ──
-  window.toggleTagDropdown = function() {
-    const btn = document.getElementById('tagFilterBtn');
-    const dd  = document.getElementById('tagDropdown');
-    btn.classList.toggle('open');
-    dd.classList.toggle('open');
-  };
-
-  function buildTagDropdown() {
-    // Collect unique tags actually used by groups, sorted alphabetically
-    const usedTags = [...new Set(groups.map(g => g.tag).filter(Boolean))].sort();
-
-    const dd = document.getElementById('tagDropdown');
-    dd.innerHTML = [
-      // Always-first "All Tags" option
-      `<button class="tag-option${activeTag === 'all' ? ' active' : ''}" data-tag="all" onclick="setTagFilter('all')">🏷 All Tags</button>`,
-      // One button per unique tag found in groups data
-      ...usedTags.map(t =>
-        `<button class="tag-option${activeTag === t ? ' active' : ''}" data-tag="${t}" onclick="setTagFilter('${t.replace(/'/g, "\\'")}')">${t}</button>`
-      )
-    ].join('');
-
-    // Show a placeholder if no groups exist yet
-    if (!usedTags.length) {
-      dd.innerHTML += `<span class="tag-dropdown-empty">No tags yet — add a group first.</span>`;
-    }
+  function starsHTML(val, cls = "star-d", size = "") {
+    return Array.from({length: 5}, (_, i) =>
+      `<span class="${cls}${i < Math.round(val) ? " on" : ""}" ${size}>${"★"}</span>`
+    ).join("");
   }
-
-  window.setTagFilter = function(tag) {
-    activeTag = tag;
-
-    // update button label + active style
-    document.getElementById('tagFilterLabel').textContent = tag === 'all' ? '🏷 All Tags' : '🏷 ' + tag;
-    document.getElementById('tagFilterBtn').classList.toggle('active-filter', tag !== 'all');
-
-    currentPage = 1;
-
-    // close dropdown
-    document.getElementById('tagFilterBtn').classList.remove('open');
-    document.getElementById('tagDropdown').classList.remove('open');
-
-    renderGrid();
-  };
-
-  // close tag dropdown when clicking outside
-  document.addEventListener('click', e => {
-    const wrap = document.getElementById('tagFilterWrap');
-    if (wrap && !wrap.contains(e.target)) {
-      document.getElementById('tagFilterBtn').classList.remove('open');
-      document.getElementById('tagDropdown').classList.remove('open');
-    }
-  });
-
-  // ── STATS ──
-  function updateStats() {
-    const total = groups.length;
-    const rated = groups.filter(g => (ratings[g.id] || 0) > 0).length;
-    document.getElementById('statTotal').textContent   = total;
-    document.getElementById('statRated').textContent   = rated;
-    document.getElementById('statUnrated').textContent = total - rated;
-    document.getElementById('enrolledLabel').textContent =
-      `AY 2026–2027 · ${total} group${total !== 1 ? 's' : ''} enrolled`;
-  }
-
-  // ── RENDER ENGINE ──
-  function renderGrid() {
-    updateStats();
-    buildTagDropdown();
-
-    let list = groups;
-
-    // 1. Stage tab filter
-    if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
-
-    // 2. Tag dropdown filter
-    if (activeTag !== 'all') list = list.filter(g => g.tag === activeTag);
-
-    // 3. Search filter
-    if (query) list = list.filter(g =>
-      g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query));
-
-    // Section label
-    const stagePart = activeStage === 'all' ? 'All Projects' : activeStage;
-    const tagPart   = activeTag   !== 'all' ? ` — ${activeTag}` : '';
-    document.getElementById('sectionLabel').textContent =
-      query ? `Results for "${query}"` : stagePart + tagPart;
-
-    const grid = document.getElementById('cardGrid');
-    if (!list.length) {
-      grid.innerHTML = `<div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <h3>${groups.length ? 'No results found' : 'No groups yet'}</h3>
-        <p>${groups.length ? 'Try a different search or filter.' : 'Click "+ Add Group" or "Import Excel" to start.'}</p>
-      </div>`;
-      document.getElementById('pagination').style.display = 'none';
-      return;
-    }
-
-    // ── PAGINATION ──
-    const totalPages = Math.ceil(list.length / PAGE_SIZE);
-    // clamp currentPage in case filters reduced total
-    if (currentPage > totalPages) currentPage = totalPages;
-
-    const start   = (currentPage - 1) * PAGE_SIZE;
-    const pageList = list.slice(start, start + PAGE_SIZE);
-
-    grid.innerHTML = pageList.map((g, i) => cardHTML(g, start + i)).join('');
-
-    // ── Attach card click listeners (avoids inline onclick ID escaping bugs) ──
-    pageList.forEach(g => {
-      const cardEl = document.getElementById('card-' + g.id);
-      if (cardEl) {
-        cardEl.addEventListener('click', () => toggleCard(g.id));
-      }
-    });
-
-    // Wire up star ratings after DOM paint
-    pageList.forEach(g => {
-      const row = document.querySelector(`.star-row[data-id="${g.id}"]`);
-      if (!row) return;
-      const stars = [...row.querySelectorAll('.star')];
-      const saved = ratings[g.id] || 0;
-      stars.forEach((s, i) => { if (i < saved) s.classList.add('active'); });
-      stars.forEach(star => {
-        star.addEventListener('click', e => {
-          e.stopPropagation();
-          const v = +star.dataset.val;
-          ratings[g.id] = v;
-          persist(RK, ratings);
-          stars.forEach((s, i) => s.classList.toggle('active', i < v));
-          updateStats();
-        });
-      });
-    });
-
-    // ── RENDER PAGINATION BAR ──
-    renderPagination(list.length, totalPages);
-  }
-
-  function renderPagination(total, totalPages) {
-    const bar      = document.getElementById('pagination');
-    const info     = document.getElementById('paginationInfo');
-    const numbers  = document.getElementById('pageNumbers');
-    const prevBtn  = document.getElementById('prevBtn');
-    const nextBtn  = document.getElementById('nextBtn');
-
-    if (totalPages <= 1) {
-      bar.style.display = 'none';
-      return;
-    }
-
-    bar.style.display = 'flex';
-
-    const start = (currentPage - 1) * PAGE_SIZE + 1;
-    const end   = Math.min(currentPage * PAGE_SIZE, total);
-    info.textContent = `Showing ${start}–${end} of ${total} groups`;
-
-    prevBtn.disabled = currentPage === 1;
-    nextBtn.disabled = currentPage === totalPages;
-
-    // Page number buttons — show up to 5 around current page
-    const range = [];
-    const delta = 2;
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) {
-        range.push(i);
-      }
-    }
-
-    // Insert ellipsis markers
-    const withEllipsis = [];
-    let prev = null;
-    for (const page of range) {
-      if (prev !== null && page - prev > 1) withEllipsis.push('…');
-      withEllipsis.push(page);
-      prev = page;
-    }
-
-    numbers.innerHTML = withEllipsis.map(p =>
-      p === '…'
-        ? `<span class="page-ellipsis">…</span>`
-        : `<button class="page-num${p === currentPage ? ' active' : ''}" onclick="goToPage(${p})">${p}</button>`
-    ).join('');
-  }
-
-  window.changePage = function(dir) {
-    const totalPages = Math.ceil(
-      groups
-        .filter(g => activeStage === 'all' || g.stage === activeStage)
-        .filter(g => activeTag   === 'all' || g.tag   === activeTag)
-        .filter(g => !query || g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query))
-        .length / PAGE_SIZE
-    );
-    currentPage = Math.max(1, Math.min(currentPage + dir, totalPages));
-    renderGrid();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  window.goToPage = function(page) {
-    currentPage = page;
-    renderGrid();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   function cardHTML(g, i) {
-    const thumb = g.thumb || svgThumb(i);
-    const com   = comments[g.id] || '';
-    const delay = Math.min(i * 0.05, 0.5);
+    const avg   = avgRating(g.groupId);
+    const delay = Math.min(i * 0.04, 0.5);
+    const cc    = allComments(g.groupId).length;
+    const thumb = svgThumb(i);
     return `
-    <div class="card" id="card-${g.id}" style="animation-delay:${delay}s">
+    <div class="card" id="card-${g.groupId}" style="animation-delay:${delay}s">
       <div class="card-thumb">
-        <img src="${thumb}" alt="${g.title}" onerror="this.src='${svgThumb(i)}'"/>
-        <div class="thumb-badge">${g.tag || '—'}</div>
+        <img src="${thumb}" alt="${g.title}"/>
+        <div class="card-badge">${g.tag || "—"}</div>
       </div>
       <div class="card-body">
-        <div class="card-group-num">Group ${g.groupNum}</div>
+        <div class="card-gnum">Group ${g.groupId}</div>
         <div class="card-title">${g.title}</div>
-        <div class="card-desc">${g.desc}</div>
+        <div class="card-desc">${g.description}</div>
       </div>
-      <div class="card-expand">
-        <div class="card-divider"></div>
-        <div class="card-details">
-          <div class="detail-row">
-            <span class="detail-label">🎓 Stage</span>
-            <span class="detail-value">${g.stage || '—'}</span>
-          </div>
-          <div class="detail-row col">
-            <span class="detail-label">⭐ Rate this Proposal</span>
-            <div class="star-row" data-id="${g.id}" onclick="event.stopPropagation()">
-              <span class="star" data-val="1">★</span>
-              <span class="star" data-val="2">★</span>
-              <span class="star" data-val="3">★</span>
-              <span class="star" data-val="4">★</span>
-              <span class="star" data-val="5">★</span>
-            </div>
-          </div>
-          <div class="detail-row col">
-            <span class="detail-label">💬 Comment</span>
-            <textarea class="comment-box" id="com-${g.id}" placeholder="Write your feedback on this proposal…" onclick="event.stopPropagation()">${com}</textarea>
-          </div>
-          <div class="action-row" onclick="event.stopPropagation()">
-            <button class="save-btn" onclick="saveComment('${g.id}')">Save</button>
-            <span class="saved-msg" id="smsg-${g.id}">✓ Saved</span>
-            <button class="delete-btn" onclick="askDelete('${g.id}')">🗑 Delete</button>
-          </div>
+      <div class="card-foot">
+        <div class="card-stars">${starsHTML(avg)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${avg > 0 ? `<span class="card-avg">${avg.toFixed(1)}</span>` : `<span class="card-unrated">Unrated</span>`}
+          ${cc > 0 ? `<span class="card-ccount">💬 ${cc}</span>` : ""}
         </div>
       </div>
-      <div class="expand-indicator">▾</div>
     </div>`;
   }
 
-  window.toggleCard = function(id) {
-    const el = document.getElementById('card-' + id);
-    if (!el) return;
-    const isExpanded = el.classList.contains('expanded');
-    // Only collapse cards inside the live grid
-    document.querySelectorAll('#cardGrid .card.expanded').forEach(c => c.classList.remove('expanded'));
-    if (!isExpanded) el.classList.add('expanded');
-  };
+  // ══════════════════════════════════════════════
+  // PAGINATION
+  // ══════════════════════════════════════════════
+  function renderPagination(total, totalPages) {
+    const bar = document.getElementById("pagination");
+    if (totalPages <= 1) { bar.style.display = "none"; return; }
+    bar.style.display = "flex";
+    const start = (currentPage - 1) * PAGE_SIZE + 1;
+    const end   = Math.min(currentPage * PAGE_SIZE, total);
+    document.getElementById("pageInfo").textContent = `Showing ${start}–${end} of ${total}`;
+    document.getElementById("pgPrev").disabled = currentPage === 1;
+    document.getElementById("pgNext").disabled = currentPage === totalPages;
 
-  window.saveComment = function(id) {
-    const ta = document.getElementById('com-' + id);
-    if (!ta) return;
-    comments[id] = ta.value;
-    persist(CK, comments);
-    const m = document.getElementById('smsg-' + id);
-    if (m) { m.classList.add('show'); setTimeout(() => m.classList.remove('show'), 2000); }
-  };
-
-  // ── DELETE ──
-  window.askDelete = function(id) { pendingDel = id; openModal('delModal'); };
-  window.confirmDelete = function() {
-    if (!pendingDel) return;
-    groups = groups.filter(g => g.id !== pendingDel);
-    persist(GK, groups);
-    delete ratings[pendingDel];  persist(RK, ratings);
-    delete comments[pendingDel]; persist(CK, comments);
-    pendingDel = null;
-    currentPage = 1;
-    closeModal('delModal');
-    renderGrid();
-  };
-
-  // ── TAG SELECT — show/hide custom input ──
-  window.handleTagChange = function() {
-    const val  = document.getElementById('fTag').value;
-    const wrap = document.getElementById('customTagWrap');
-    const inp  = document.getElementById('fCustomTag');
-    if (val === 'Other') {
-      wrap.style.display = 'block';
-      inp.focus();
-    } else {
-      wrap.style.display = 'none';
-      inp.value = '';
+    const range = [], d = 2;
+    for (let i = 1; i <= totalPages; i++) {
+      if (i === 1 || i === totalPages || (i >= currentPage - d && i <= currentPage + d)) range.push(i);
     }
-  };
-
-  // ── ADD GROUP MODAL ──
-  window.openAddModal = function() {
-    ['fGroupNum', 'fTitle', 'fDesc'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('fTag').value          = '';
-    document.getElementById('fStage').value        = '';
-    document.getElementById('fCustomTag').value    = '';
-    document.getElementById('customTagWrap').style.display = 'none';
-    document.getElementById('formErr').style.display = 'none';
-    clearThumb();
-    openModal('addModal');
-  };
-
-  window.onThumbPick = function(e) {
-    const f = e.target.files[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = ev => {
-      thumbData = ev.target.result;
-      const p = document.getElementById('thumbPreview');
-      p.src = thumbData; p.classList.add('show');
-      document.getElementById('removeThumbBtn').style.display = 'block';
-    };
-    r.readAsDataURL(f);
-  };
-
-  window.clearThumb = function() {
-    thumbData = null;
-    const p = document.getElementById('thumbPreview');
-    p.src = ''; p.classList.remove('show');
-    document.getElementById('removeThumbBtn').style.display = 'none';
-    document.getElementById('thumbFile').value = '';
-  };
-
-  window.submitGroup = function() {
-    const gn  = document.getElementById('fGroupNum').value.trim();
-    const ti  = document.getElementById('fTitle').value.trim();
-    const de  = document.getElementById('fDesc').value.trim();
-    const tgRaw = document.getElementById('fTag').value;
-    const st  = document.getElementById('fStage').value;
-    const er  = document.getElementById('formErr');
-
-    // Resolve final tag — use custom input if "Other" was chosen
-    const customTag = document.getElementById('fCustomTag').value.trim();
-    const tg = tgRaw === 'Other' ? customTag : tgRaw;
-
-    if (!gn || !ti || !de || !tgRaw || !st) {
-      er.textContent = '⚠ Please fill in all fields.';
-      er.style.display = 'block';
-      return;
+    const withEll = []; let prev = null;
+    for (const p of range) {
+      if (prev !== null && p - prev > 1) withEll.push("…");
+      withEll.push(p); prev = p;
     }
+    document.getElementById("pgNums").innerHTML = withEll.map(p =>
+      p === "…" ? `<span class="pg-ell">…</span>`
+                : `<button class="pg-num${p === currentPage ? " active" : ""}" onclick="goToPage(${p})">${p}</button>`
+    ).join("");
+  }
 
-    // Extra check: if Other selected but custom tag is empty
-    if (tgRaw === 'Other' && !customTag) {
-      er.textContent = '⚠ Please enter a custom tag name.';
-      er.style.display = 'block';
-      document.getElementById('fCustomTag').focus();
-      return;
-    }
+  window.changePage = function(dir) {
+    let list = groups;
+    if (activeStage !== "all") list = list.filter(g => g.stage === activeStage);
+    if (activeTag   !== "all") list = list.filter(g => g.tag   === activeTag);
+    if (query) list = list.filter(g => g.title.toLowerCase().includes(query) || (g.groupId || "").toLowerCase().includes(query));
+    const tp = Math.ceil(list.length / PAGE_SIZE);
+    currentPage = Math.max(1, Math.min(currentPage + dir, tp));
+    renderGrid(); window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-    er.style.display = 'none';
+  window.goToPage = function(p) {
+    currentPage = p; renderGrid(); window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-    groups.push({
-      id:       generateId('manual'),
-      groupNum: gn,
-      title:    ti,
-      desc:     de,
-      tag:      tg,
-      stage:    st,
-      thumb:    thumbData || null
+  // ══════════════════════════════════════════════
+  // CARD DETAIL MODAL
+  // ══════════════════════════════════════════════
+  function openCardModal(gid) {
+    const g = groups.find(x => x.groupId === gid);
+    if (!g) return;
+    viewingGroupId = gid;
+
+    const i     = groups.indexOf(g);
+    const avg   = avgRating(gid);
+
+    document.getElementById("cmHeroImg").src         = svgThumb(i);
+    document.getElementById("cmHeroBadge").textContent = g.tag || "—";
+    document.getElementById("cmGroup").textContent   = `Group ${g.groupId}`;
+    document.getElementById("cmStagePill").textContent = g.stage || "—";
+    document.getElementById("cmTitle").textContent   = g.title;
+    document.getElementById("cmDesc").textContent    = g.description;
+
+    document.getElementById("cmAvgStars").innerHTML = starsHTML(avg, "star-d");
+    document.getElementById("cmAvgVal").textContent = avg > 0 ? `${avg.toFixed(1)} / 5` : "No ratings yet";
+
+    const isFac = currentRole === "faculty";
+    document.getElementById("facPanel").classList.toggle("hidden", !isFac);
+    document.getElementById("stuPanel").classList.toggle("hidden", currentRole !== "student");
+
+    if (isFac)                    renderFacPanel(gid);
+    if (currentRole === "student") renderStuPanel(gid);
+
+    openOverlay("cardOverlay");
+  }
+
+  // ── Faculty Panel ────────────────────────────
+  function renderFacPanel(gid) {
+    const existingRating = myRating(gid);
+    pendingStarVal       = existingRating;
+
+    const stars = [...document.querySelectorAll("#cmStarInput .si")];
+    const note  = document.getElementById("facRatingNote");
+
+    stars.forEach(s => {
+      s.classList.toggle("on", +s.dataset.v <= existingRating);
+      s.onclick = e => {
+        e.stopPropagation();
+        pendingStarVal = +s.dataset.v;
+        stars.forEach(x => x.classList.toggle("on", +x.dataset.v <= pendingStarVal));
+      };
     });
 
-    persist(GK, groups);
-    currentPage = 1;
-    closeModal('addModal');
-    renderGrid();
-  };
+    note.textContent = existingRating > 0
+      ? `Your current rating: ${existingRating}/5 — saving will update it.`
+      : "";
 
-  // ── MODAL UTILS ──
-  window.openModal    = id => document.getElementById(id).classList.add('open');
-  window.closeModal   = id => document.getElementById(id).classList.remove('open');
-  window.overlayClick = (e, id) => { if (e.target.id === id) closeModal(id); };
+    // My previous comments
+    const mine  = myComments(gid);
+    const mList = document.getElementById("myComments");
+    if (mine.length) {
+      mList.innerHTML = mine.map(c =>
+        `<div class="my-comment-item">${c.comment}</div>`
+      ).join("");
+    } else {
+      mList.innerHTML = `<p class="no-my-comments">You haven't commented yet.</p>`;
+    }
 
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeModal('addModal'); closeModal('delModal'); }
-  });
+    document.getElementById("cmCommentIn").value = "";
+    document.getElementById("savedToast").classList.remove("show");
+  }
 
-  // ── INIT ──
-  (async function init() {
-    const grid = document.getElementById('cardGrid');
-    grid.innerHTML = '<p>Loading projects…</p>';
+  window.submitFacultyFeedback = async function() {
+    const gid     = viewingGroupId;
+    const comment = document.getElementById("cmCommentIn").value.trim();
+    const rating  = pendingStarVal || null;
+
+    if (!rating && !comment) {
+      alert("Please add a rating or a comment before saving.");
+      return;
+    }
+
+    const payload = { groupId: gid, faculty: currentFaculty };
+    if (rating)  payload.rating  = rating;
+    if (comment) payload.comment = comment;
 
     try {
-      await fetchGroups();
-    } catch(e) {
-      console.error(e);
-      grid.innerHTML = `<div class="empty-state">
-        <div class="empty-icon">⚠️</div>
-        <h3>Failed to load projects</h3>
-        <p>Check your internet connection or the Google Sheet URL.</p>
-      </div>`;
+      const res  = await fetch(APPS_SCRIPT_URL, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.status !== "ok") throw new Error(data.message || "Save failed");
+
+      // Refresh data silently
+      const refreshed = await fetch(APPS_SCRIPT_URL);
+      const rd        = await refreshed.json();
+      if (rd.status === "ok") {
+        groups = rd.groups  || [];
+        rcData = rd.comments || [];
+      }
+
+      document.getElementById("savedToast").classList.add("show");
+      setTimeout(() => document.getElementById("savedToast").classList.remove("show"), 2200);
+
+      // Re-render panel & stats
+      renderFacPanel(gid);
+      updateStats();
+      renderGrid();
+
+      // Update avg in open modal
+      const avg = avgRating(gid);
+      document.getElementById("cmAvgStars").innerHTML = starsHTML(avg, "star-d");
+      document.getElementById("cmAvgVal").textContent = avg > 0 ? `${avg.toFixed(1)} / 5` : "No ratings yet";
+
+    } catch (err) {
+      alert("Error saving: " + err.message);
     }
-    // If fetchGroups succeeded but no groups, renderGrid will handle empty state
-  })();
+  };
+
+  // ── Student Panel ────────────────────────────
+  function renderStuPanel(gid) {
+    const all     = allComments(gid);
+    const favName = favorites[gid] || null;
+    const listEl  = document.getElementById("stuCommentsList");
+    const noEl    = document.getElementById("stuNoComments");
+    const favEl   = document.getElementById("stuFavNote");
+
+    if (!all.length) {
+      listEl.innerHTML = "";
+      noEl.classList.remove("hidden");
+    } else {
+      noEl.classList.add("hidden");
+      listEl.innerHTML = all.map((c, idx) => {
+        const isFav = favName === c.faculty;
+        return `
+        <div class="comment-card${isFav ? " fav-on" : ""}">
+          <div class="cc-top">
+            <span class="cc-anon">Anonymous Faculty ${idx + 1}</span>
+            <div class="cc-stars">${starsHTML(c.rating || 0)}</div>
+          </div>
+          <div class="cc-text">${c.comment || "<em style='color:var(--sub)'>No text.</em>"}</div>
+          <button class="fav-btn${isFav ? " fav-on" : ""}" onclick="toggleFav('${gid}','${c.faculty}',${idx})">
+            ${isFav ? "❤️ Favorited" : "🤍 Favorite"}
+          </button>
+        </div>`;
+      }).join("");
+    }
+
+    if (favName) {
+      const idx = all.findIndex(c => c.faculty === favName);
+      favEl.innerHTML = `<div class="fav-selected">❤️ You favorited <strong>Anonymous Faculty ${idx + 1}'s</strong> comment — they could be your advisor.</div>`;
+    } else {
+      favEl.innerHTML = `<span style="font-size:13px;color:var(--sub)">Tap ❤️ on a comment to mark a favorite.</span>`;
+    }
+  }
+
+  window.toggleFav = function(gid, facultyName, idx) {
+    favorites[gid] = favorites[gid] === facultyName ? undefined : facultyName;
+    if (!favorites[gid]) delete favorites[gid];
+    saveLocal(FAV_KEY, favorites);
+    renderStuPanel(gid);
+  };
+
+  // ══════════════════════════════════════════════
+  // ADD GROUP MODAL (info only — data from Sheets)
+  // ══════════════════════════════════════════════
+  window.openAddModal = function() {
+    if (currentRole !== "faculty") return;
+    openOverlay("addOverlay");
+  };
+
+  // ══════════════════════════════════════════════
+  // EXPORT TO XLSX
+  // ══════════════════════════════════════════════
+  window.exportXLSX = function() {
+    const rows = groups.map(g => {
+      const avg  = avgRating(g.groupId);
+      const all  = allComments(g.groupId);
+      const rcs  = rcData.filter(r => r.groupId === g.groupId && r.rating !== null && r.rating !== "");
+
+      const row = {
+        "Group ID":      g.groupId,
+        "Title":         g.title,
+        "Description":   g.description,
+        "Tag":           g.tag,
+        "Stage":         g.stage,
+        "Avg Rating":    avg > 0 ? +avg.toFixed(2) : "",
+        "Total Reviews": rcs.length,
+        "Total Comments": all.length,
+      };
+      rcs.forEach(r => { row[`Rating — ${r.faculty}`]  = r.rating  || ""; });
+      all.forEach(c => { row[`Comment — ${c.faculty}`] = c.comment || ""; });
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "PPMD Export");
+    XLSX.writeFile(wb, `PPMD_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  // Import from XLSX (reads group data locally, for preview)
+  const xlsxUp = document.getElementById("xlsxUp");
+  if (xlsxUp) xlsxUp.addEventListener("change", e => {
+    const f = e.target.files[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb    = XLSX.read(new Uint8Array(ev.target.result), { type: "array" });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const data  = XLSX.utils.sheet_to_json(sheet);
+        alert(`📊 This file has ${data.length} rows.\n\nTo import groups, add them directly in your Google Sheets "Groups" tab, then click Refresh.`);
+      } catch (err) {
+        alert("Could not read file: " + err.message);
+      }
+      e.target.value = "";
+    };
+    reader.readAsArrayBuffer(f);
+  });
+
+  // ══════════════════════════════════════════════
+  // OVERLAY HELPERS
+  // ══════════════════════════════════════════════
+  window.openOverlay  = id => document.getElementById(id).classList.add("open");
+  window.closeOverlay = id => document.getElementById(id).classList.remove("open");
+  window.overlayClick = (e, id) => { if (e.target.id === id) closeOverlay(id); };
+
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") {
+      ["cardOverlay","addOverlay","nameOverlay"].forEach(closeOverlay);
+    }
+  });
+
+  // Enter key in name input
+  document.getElementById("nameInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") window.confirmName();
+  });
+
 });
