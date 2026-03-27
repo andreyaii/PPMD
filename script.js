@@ -93,9 +93,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let activeStage = 'all';
   let activeTag   = 'all';
+  let activeSort = 'default';
   let query       = '';
   let currentPage = 1;
   const PAGE_SIZE = 10;
+
+  window.setSort = function(sortType) {
+    activeSort = sortType;
+    currentPage = 1; // Always send them back to page 1 when sorting
+    renderGrid();
+  };
 
  window.chooseRole = function(role) {
   if (role === 'faculty') {
@@ -198,6 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Target specific elements
     const searchBox = document.querySelector('.search-box');
     const tagFilter = document.getElementById('tagFilterWrap');
+    const sortWrap  = document.getElementById('sortWrap');
     const statsBar  = document.querySelector('.stats-bar');
     const filterTabs = document.querySelector('.filter-tabs');
     const gridSection = document.querySelector('.grid-section');
@@ -213,6 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (statsBar) statsBar.style.display = '';
       if (filterTabs) filterTabs.style.display = '';
       if (gridSection) gridSection.style.display = ''; 
+      if (sortWrap) sortWrap.style.display = 'block';
       
     } else if (currentRole === 'student') {
       badge.textContent = '🎓 Student View · Switch';
@@ -225,6 +234,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (tagFilter) tagFilter.style.display = 'none';
       if (statsBar) statsBar.style.display = 'none';
       if (filterTabs) filterTabs.style.display = 'none';
+      if (sortWrap) sortWrap.style.display = 'none';
       
       // Keep the grid section visible so they can see their card!
       if (gridSection) gridSection.style.display = '';
@@ -361,6 +371,27 @@ document.addEventListener("DOMContentLoaded", () => {
         const tagPart   = activeTag   !== 'all' ? ` — ${activeTag}` : '';
         document.getElementById('sectionLabel').textContent = query ? `Results for "${query}"` : stagePart + tagPart;
         
+        function getMyRating(gid) {
+            if (!ratings[gid]) return 0;
+            return ratings[gid][currentFaculty] || 0;
+        }
+
+        if (activeSort === 'highest') {
+            list.sort((a, b) => groupAvgRating(b.id) - groupAvgRating(a.id));
+        } else if (activeSort === 'lowest') {
+            list.sort((a, b) => groupAvgRating(a.id) - groupAvgRating(b.id));
+        } else if (activeSort === 'highest_mine') {
+            list.sort((a, b) => getMyRating(b.id) - getMyRating(a.id));
+        } else if (activeSort === 'needs_rating') {
+            list.sort((a, b) => {
+                const ratingA = getMyRating(a.id);
+                const ratingB = getMyRating(b.id);
+                // Push unrated (0) to the top
+                if (ratingA === 0 && ratingB > 0) return -1;
+                if (ratingB === 0 && ratingA > 0) return 1;
+                return 0; 
+            });
+        }
         // Reset grid styles for faculty multi-card view
         grid.style.display = '';
         grid.style.justifyContent = '';

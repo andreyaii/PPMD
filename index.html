@@ -85,6 +85,18 @@
         <div class="tag-dropdown" id="tagDropdown"></div>
       </div>
 
+      <div id="sortWrap" style="display:none;">
+        <select class="form-select" id="sortDropdown" onchange="setSort(this.value)" style="padding-top:8px; padding-bottom:8px; cursor:pointer;">
+          <option value="default">↕️ Sort by: Default</option>
+          <option value="highest">⭐ Top Rated (Overall)</option>
+          <option value="lowest">⭐ Lowest Rated (Overall)</option>
+          <option value="highest_mine">👩‍🏫 My Highest Ratings</option>
+          <option value="needs_rating">📝 Pending My Review</option>
+        </select>
+      </div>
+
+      
+
       <div id="facultyControls" style="display:none;align-items:center;gap:10px;">
         <button class="btn-primary" onclick="openAddModal()">＋ Add Group</button>
         <input type="file" id="excelUpload" accept=".xlsx,.xls" style="display:none"/>
