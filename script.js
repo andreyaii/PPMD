@@ -52,25 +52,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const facName  = String(row[2] || '');
         const rating   = Number(row[3] || 0);
         const comment  = String(row[4] || '');
-        const dbId     = String(row[6] || generateCommentId()); // Use ID from DB if exists
+        const dbId     = String(row[6] || generateCommentId()); 
         const isFav    = String(row[7]).toUpperCase() === "TRUE";
 
         if (!ratings[gid]) ratings[gid] = {};
-        // Only store the rating if it's valid
         if (rating > 0) {
             ratings[gid][facName] = rating;
         }
 
         if (!comments[gid]) comments[gid] = [];
         comments[gid].push({
-            id: dbId,
+            id: dbId, // Store the unique ID from column G
             name: facName,
             text: comment,
             rating: rating
         });
 
         if (isFav) {
-            favorites[gid] = facName;
+            favorites[gid] = dbId; // Store the ID as the favorite, NOT the name
         }
       });
 
@@ -593,7 +592,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // CHANGE 5: renderStudentSection now uses comment.id for favorites
 function renderStudentSection(gid) {
     const allComments = groupAllComments(gid);
-    const favoriteFacultyName = favorites[gid] || null; // Now tracking by Faculty Name
+    const favoriteId = favorites[gid] || null; // Tracking by unique ID now
     const listEl = document.getElementById('cmCommentsList');
     const noEl = document.getElementById('cmNoComments');
     const favNote = document.getElementById('cmFavNote');
@@ -604,7 +603,7 @@ function renderStudentSection(gid) {
     } else {
       noEl.style.display = 'none';
       listEl.innerHTML = allComments.map((c, idx) => {
-        const isFav = favoriteFacultyName === c.name; // Compare by Faculty Name
+        const isFav = favoriteId === c.id; // Compare unique IDs
         return `
         <div class="comment-card${isFav ? ' fav-active' : ''}" id="ccard-${c.id}">
           <div class="comment-card-top">
@@ -613,51 +612,51 @@ function renderStudentSection(gid) {
           </div>
           <div class="comment-text">${c.text || '<em style="color:var(--subtext)">No comment written.</em>'}</div>
           
-          <button class="fav-btn${isFav ? ' fav-active' : ''}" onclick="toggleFav('${gid}','${c.name}')">
+          <button class="fav-btn${isFav ? ' fav-active' : ''}" onclick="toggleFav('${gid}','${c.id}')">
             ${isFav ? '❤️ Favorited' : '🤍 Mark as Favorite'}
           </button>
         </div>`;
       }).join('');
     }
 
-    if (favoriteFacultyName) {
-      const idx = allComments.findIndex(c => c.name === favoriteFacultyName);
+    if (favoriteId) {
+      const favComment = allComments.find(c => c.id === favoriteId);
+      const idx = allComments.indexOf(favComment);
       if (idx !== -1) {
         favNote.innerHTML = `<div class="fav-selected-note">❤️ You favorited <strong>Anonymous Faculty ${idx + 1}'s</strong> comment.</div>`;
       }
     } else {
       favNote.innerHTML = `<span style="font-size:13px;color:var(--subtext);">You haven't picked a favorite yet. Tap ❤️ on a comment to pick one.</span>`;
     }
-  }
+}
 
   // FIXED: Now async, connects to API_URL, and uses facultyName
-  window.toggleFav = async function(gid, facultyName) {
+  window.toggleFav = async function(gid, commentId) {
     const current = favorites[gid];
     
     // 1. Update local UI instantly
-    if (current === facultyName) {
+    if (current === commentId) {
       delete favorites[gid]; // Toggle off
     } else {
-      favorites[gid] = facultyName; // Toggle on
+      favorites[gid] = commentId; // Toggle on (only this ID)
     }
     
     localStorage.setItem(FAV, JSON.stringify(favorites));
-    renderStudentSection(gid); // Re-render the UI so heart turns red immediately
+    renderStudentSection(gid); 
 
-    // 2. Sync to Database in the background
+    // 2. Sync to Database
     try {
         await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: "toggleFavorite",
                 groupId: gid,
-                facultyName: facultyName
+                commentId: commentId // Send the unique ID
             })
         });
         console.log("Database updated: Favorite synced.");
     } catch (error) {
         console.error("Database error:", error);
-        alert("Failed to sync favorite to database. Please check your connection.");
     }
   };
 
