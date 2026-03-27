@@ -230,6 +230,43 @@ header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 18px 14px; gap: 8px;
 }
+
+
+/* ══════════════════════════════════════
+   CARD STATUS BADGES (Bottom of Card)
+══════════════════════════════════════ */
+
+
+.card-reviewed-badge {
+  background: #10b981; 
+  color: #fff;
+  border-radius: 20px; 
+  padding: 4px 12px; 
+  font-size: 11px;
+  font-weight: 700; 
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+  letter-spacing: 0.3px;
+}
+
+.card-reviewed-badge-footer {
+  background: #d1fae5;
+  color: #059669;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+}
+
+/* Override the old absolute positioning since it's no longer on the image */
+.card-status-container .thumb-badge {
+  position: static; 
+  background: var(--primary-light); /* Softer background since it's not over an image */
+  border: 1px solid rgba(79,70,229,.15);
+  backdrop-filter: none; 
+  padding: 4px 12px;
+}
 .card-footer-stars { display: flex; gap: 2px; }
 .card-footer-meta  { display: flex; align-items: center; gap: 8px; }
 .card-avg          { font-size: 12px; font-weight: 700; color: var(--star-active); }
@@ -511,6 +548,15 @@ html.dark body {
 html.dark .role-badge.faculty { background: #1e1b4b; color: #a5b4fc; border-color: #4338ca; }
 html.dark .role-badge.student { background: #064e3b; color: #6ee7b7; border-color: #065f46; }
 html.dark .fav-btn { border-color: var(--border); }
+html.dark .card-reviewed-badge {
+  background: #059669; /* Slightly darker green for dark mode contrast */
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.4);
+}
+/* Dark Mode Support */
+html.dark .card-reviewed-badge-footer {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
 
 
 /* ══════════════════════════════════════

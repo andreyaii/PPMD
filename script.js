@@ -433,12 +433,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const avg   = groupAvgRating(g.id);
     const delay = Math.min(i * 0.05, 0.5);
     const commentCount = groupAllComments(g.id).length;
+    
+    // Check if the logged-in faculty has rated this group
+    let reviewedBadge = '';
+    if (currentRole === 'faculty' && currentFaculty) {
+        const myRating = (ratings[g.id] || {})[currentFaculty] || 0;
+        if (myRating > 0) {
+            reviewedBadge = `<span class="card-reviewed-badge-footer">✓ REVIEWED</span>`;
+        }
+    }
+
     return `
     <div class="card" id="card-${g.id}" style="animation-delay:${delay}s">
       <div class="card-thumb">
         <img src="${thumb}" alt="${g.title}" onerror="this.src='${svgThumb(i)}'"/>
-        <div class="thumb-badge">${g.tag || '—'}</div>
-      </div>
+        <div class="thumb-badge">${g.tag || '—'}</div> </div>
       <div class="card-body">
         <div class="card-group-num">Group ${g.groupNum}</div>
         <div class="card-title">${g.title}</div>
@@ -447,7 +456,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="card-footer">
         <div class="card-footer-stars">${starsHTML(avg)}</div>
         <div class="card-footer-meta">
-          ${avg > 0 ? `<span class="card-avg">${avg.toFixed(1)}</span>` : '<span class="card-unrated">Unrated</span>'}
+          ${reviewedBadge} ${avg > 0 ? `<span class="card-avg">${avg.toFixed(1)}</span>` : '<span class="card-unrated">Unrated</span>'}
           ${commentCount > 0 ? `<span class="card-comment-count">💬 ${commentCount}</span>` : ''}
         </div>
       </div>
