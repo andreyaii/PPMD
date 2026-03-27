@@ -45,25 +45,33 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // CHANGE 3: Map feedback with commentId (column index 6)
       // row[0]=GID, row[1]=Title, row[2]=Faculty, row[3]=Rating, row[4]=Comment, row[5]=Timestamp, row[6]=commentId
+      // row=GID, row=Title, row=Faculty, row=Rating, row=Comment, row=Timestamp, row=isFavorite
+     // row[0]=GID, row[1]=Title, row[2]=Faculty, row[3]=Rating, row[4]=Comment, row[5]=Timestamp, row[6]=commentId, row[7]=isFavorite
       data.feedback.forEach(row => {
-        const gid = String(row[0]);
-        const facName = String(row[2]);
-        const rating = Number(row[3]);
-        const comment = String(row[4]);
-        const commentId = row[6] ? String(row[6]) : generateCommentId(); // use stored ID or generate one
+        const gid      = String(row[0] || '');
+        const facName  = String(row[2] || '');
+        const rating   = Number(row[3] || 0);
+        const comment  = String(row[4] || '');
+        const dbId     = String(row[6] || generateCommentId()); // Use ID from DB if exists
+        const isFav    = String(row[7]).toUpperCase() === "TRUE";
 
         if (!ratings[gid]) ratings[gid] = {};
-        if (!ratings[gid][facName] || ratings[gid][facName] === 0) {
+        // Only store the rating if it's valid
+        if (rating > 0) {
             ratings[gid][facName] = rating;
         }
 
         if (!comments[gid]) comments[gid] = [];
         comments[gid].push({
-            id: commentId,      // ← store unique ID
+            id: dbId,
             name: facName,
             text: comment,
             rating: rating
         });
+
+        if (isFav) {
+            favorites[gid] = facName;
+        }
       });
 
       renderGrid();
@@ -152,7 +160,7 @@ document.addEventListener("DOMContentLoaded", () => {
       closeModal('studentLoginModal');
       
       applyRoleUI(); 
-      openCardModal(group.id); // Open their specific data immediately
+     // openCardModal(group.id); // Open their specific data immediately
       renderGrid(); // Refresh grid to only show their card
   };
 
@@ -340,7 +348,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Center the single card using Flexbox
         grid.style.display = 'flex';
         grid.style.justifyContent = 'center';
-        grid.style.paddingTop = '40px'; // Breathing room from the section label
+        grid.style.alignItems = 'flex-start'; // Prevents vertical stretching
+        grid.style.paddingTop = '40px'; 
+        grid.style.minHeight = '300px';
     } else {
         // Normal filters for faculty
         if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
@@ -581,9 +591,9 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // CHANGE 5: renderStudentSection now uses comment.id for favorites
-  function renderStudentSection(gid) {
+function renderStudentSection(gid) {
     const allComments = groupAllComments(gid);
-    const favoriteCommentId = favorites[gid] || null;   // ← now storing commentId
+    const favoriteFacultyName = favorites[gid] || null; // Now tracking by Faculty Name
     const listEl = document.getElementById('cmCommentsList');
     const noEl = document.getElementById('cmNoComments');
     const favNote = document.getElementById('cmFavNote');
@@ -594,7 +604,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       noEl.style.display = 'none';
       listEl.innerHTML = allComments.map((c, idx) => {
-        const isFav = favoriteCommentId === c.id;   // ← compare IDs, not names
+        const isFav = favoriteFacultyName === c.name; // Compare by Faculty Name
         return `
         <div class="comment-card${isFav ? ' fav-active' : ''}" id="ccard-${c.id}">
           <div class="comment-card-top">
@@ -602,36 +612,53 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="comment-card-stars">${starsHTML(c.rating)}</div>
           </div>
           <div class="comment-text">${c.text || '<em style="color:var(--subtext)">No comment written.</em>'}</div>
-          <button class="fav-btn${isFav ? ' fav-active' : ''}" onclick="toggleFav('${gid}','${c.id}')">
+          
+          <button class="fav-btn${isFav ? ' fav-active' : ''}" onclick="toggleFav('${gid}','${c.name}')">
             ${isFav ? '❤️ Favorited' : '🤍 Mark as Favorite'}
           </button>
         </div>`;
       }).join('');
     }
 
-    if (favoriteCommentId) {
-      const comment = allComments.find(c => c.id === favoriteCommentId);
-      if (comment) {
-        const idx = allComments.findIndex(c => c.id === favoriteCommentId);
+    if (favoriteFacultyName) {
+      const idx = allComments.findIndex(c => c.name === favoriteFacultyName);
+      if (idx !== -1) {
         favNote.innerHTML = `<div class="fav-selected-note">❤️ You favorited <strong>Anonymous Faculty ${idx + 1}'s</strong> comment.</div>`;
-      } else {
-        favNote.innerHTML = `<span style="font-size:13px;color:var(--subtext);">You haven't picked a favorite yet. Tap ❤️ on a comment to pick one.</span>`;
       }
     } else {
       favNote.innerHTML = `<span style="font-size:13px;color:var(--subtext);">You haven't picked a favorite yet. Tap ❤️ on a comment to pick one.</span>`;
     }
   }
 
-  // CHANGE 6: toggleFav now uses commentId instead of facultyName
-  window.toggleFav = function(gid, commentId) {
+  // FIXED: Now async, connects to API_URL, and uses facultyName
+  window.toggleFav = async function(gid, facultyName) {
     const current = favorites[gid];
-    if (current === commentId) {
-      delete favorites[gid];
+    
+    // 1. Update local UI instantly
+    if (current === facultyName) {
+      delete favorites[gid]; // Toggle off
     } else {
-      favorites[gid] = commentId;
+      favorites[gid] = facultyName; // Toggle on
     }
+    
     localStorage.setItem(FAV, JSON.stringify(favorites));
-    renderStudentSection(gid);
+    renderStudentSection(gid); // Re-render the UI so heart turns red immediately
+
+    // 2. Sync to Database in the background
+    try {
+        await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: "toggleFavorite",
+                groupId: gid,
+                facultyName: facultyName
+            })
+        });
+        console.log("Database updated: Favorite synced.");
+    } catch (error) {
+        console.error("Database error:", error);
+        alert("Failed to sync favorite to database. Please check your connection.");
+    }
   };
 
   // ══════════════════════════════════════════════
@@ -767,6 +794,7 @@ document.addEventListener("DOMContentLoaded", () => {
     delBtn.textContent = origText;
     delBtn.disabled = false;
   };
+
 
   // ══════════════════════════════════════════════
   // MODAL TOGGLES
