@@ -10,6 +10,7 @@
 </head>
 <body>
 
+<!-- ROLE SELECTION MODALL -->
 <div class="modal-overlay open" id="nameModal">
   <div class="modal" style="max-width:420px;text-align:center;">
     <div style="font-size:40px;margin-bottom:12px;">🎓</div>
@@ -24,6 +25,7 @@
   </div>
 </div>
 
+<!-- FACULTY NAME MODAL -->
 <div class="modal-overlay" id="facultyNameModal">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header">
@@ -41,6 +43,7 @@
   </div>
 </div>
 
+<!-- STUDENT LOGIN MODAL -->
 <div class="modal-overlay" id="studentLoginModal">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header">
@@ -52,7 +55,10 @@
     </div>
     <div class="form-group">
       <label class="form-label">Access PIN <span>*</span></label>
-      <input type="password" class="form-input" id="studentPinInput" placeholder="Enter the PIN provided by your instructor" maxlength="10"/>
+      <div class="pin-input-wrap">
+        <input type="password" class="form-input" id="studentPinInput" placeholder="Enter the PIN provided by your instructor" maxlength="10"/>
+        <button type="button" class="pin-eye-btn" id="pinEyeBtn" onclick="togglePinVisibility()" title="Show/hide PIN">👁</button>
+      </div>
     </div>
     <p class="form-error" id="studentLoginErr" style="display:none;margin-top:-10px;margin-bottom:4px;"></p>
     <div class="modal-footer">
@@ -62,6 +68,7 @@
   </div>
 </div>
 
+<!-- HEADER -->
 <header>
   <div class="header-inner">
     <div class="header-brand">
@@ -77,6 +84,7 @@
         <input type="text" id="searchInput" placeholder="Search by title or group no…"/>
       </div>
 
+      <!-- TAG FILTER DROPDOWN -->
       <div class="tag-filter-wrap" id="tagFilterWrap">
         <button class="tag-filter-btn" id="tagFilterBtn" onclick="toggleTagDropdown()">
           <span id="tagFilterLabel">🏷 All Tags</span>
@@ -85,11 +93,25 @@
         <div class="tag-dropdown" id="tagDropdown"></div>
       </div>
 
+      <!-- SORT DROPDOWN -->
+      <div class="tag-filter-wrap" id="sortWrap" style="display:none;">
+        <button class="tag-filter-btn" id="sortFilterBtn" onclick="toggleSortDropdown()">
+          <span id="sortFilterLabel">↕ Sort: Default</span>
+          <span class="tag-filter-arrow">▾</span>
+        </button>
+        <div class="tag-dropdown" id="sortDropdown">
+          <button class="tag-option active" data-sort="default"      onclick="setSort('default')">↕ Default</button>
+          <button class="tag-option"        data-sort="highest"      onclick="setSort('highest')">Top Rated (Overall)</button>
+          <button class="tag-option"        data-sort="lowest"       onclick="setSort('lowest')">Lowest Rated</button>
+          <button class="tag-option"        data-sort="highest_mine" onclick="setSort('highest_mine')">My Highest Ratings</button>
+          <button class="tag-option"        data-sort="needs_rating" onclick="setSort('needs_rating')">Pending My Review</button>
+        </div>
+      </div>
+
+      <!-- FACULTY CONTROLS -->
       <div id="facultyControls" style="display:none;align-items:center;gap:10px;">
         <button class="btn-primary" onclick="openAddModal()">＋ Add Group</button>
         <input type="file" id="excelUpload" accept=".xlsx,.xls" style="display:none"/>
-        <button class="btn-secondary" onclick="document.getElementById('excelUpload').click()">📥 Import</button>
-        <button class="btn-secondary" onclick="exportToExcel()">📤 Export</button>
       </div>
 
       <div class="role-badge" id="roleBadge" onclick="switchRole()"></div>
@@ -101,6 +123,7 @@
   </div>
 </header>
 
+<!-- STATS BAR -->
 <div class="stats-bar">
   <div class="stats-bar-left">
     <h2>All Projects</h2>
@@ -113,12 +136,14 @@
   </div>
 </div>
 
+<!-- STAGE TABS -->
 <div class="filter-tabs">
   <button class="filter-tab active" data-stage="all" onclick="setStage('all')">All Groups</button>
   <button class="filter-tab" data-stage="Capstone 1" onclick="setStage('Capstone 1')">Capstone 1</button>
   <button class="filter-tab" data-stage="Software Engineering 1" onclick="setStage('Software Engineering 1')">Software Engineering 1</button>
 </div>
 
+<!-- GRID -->
 <div class="grid-section">
   <div class="section-label" id="sectionLabel">All Projects</div>
   <div class="grid" id="cardGrid"></div>
@@ -132,27 +157,25 @@
   </div>
 </div>
 
+<!-- CARD DETAIL MODAL -->
 <div class="modal-overlay" id="cardModal" onclick="overlayClick(event,'cardModal')">
   <div class="modal card-modal">
     <div class="modal-header">
       <div class="modal-title" id="cmTitle">—</div>
       <button class="modal-close" onclick="closeModal('cardModal')">✕</button>
     </div>
-
     <div class="cm-thumb-wrap">
       <img id="cmThumb" src="" alt=""/>
       <span class="cm-tag-badge" id="cmTag">—</span>
     </div>
-
     <div class="cm-meta">
       <span class="cm-group-num" id="cmGroupNum">—</span>
       <span class="cm-stage" id="cmStage">—</span>
     </div>
-
     <p class="cm-desc" id="cmDesc">—</p>
-
     <div class="cm-divider"></div>
 
+    <!-- Overall Rating -->
     <div class="cm-section">
       <div class="cm-section-label">⭐ Overall Rating</div>
       <div class="cm-avg-row">
@@ -161,10 +184,11 @@
       </div>
     </div>
 
+    <!-- FACULTY SECTION -->
     <div id="facultySection" style="display:none">
       <div class="cm-divider"></div>
       <div class="cm-section">
-        <div class="cm-section-label">✏️ Your Rating &amp; Comment</div>
+        <div class="cm-section-label" id="facultySectionLabel">✏️ Your Rating &amp; Comment</div>
         <div class="cm-faculty-rating">
           <div class="star-row" id="cmStarRow">
             <span class="star" data-val="1">★</span>
@@ -182,6 +206,7 @@
       </div>
     </div>
 
+    <!-- STUDENT SECTION -->
     <div id="studentSection" style="display:none">
       <div class="cm-divider"></div>
       <div class="cm-section">
@@ -189,19 +214,34 @@
         <div id="cmCommentsList" class="cm-comments-list"></div>
         <p id="cmNoComments" style="font-size:13px;color:var(--subtext);display:none;">No comments yet from faculty.</p>
       </div>
+
+      <!-- Student general insight box -->
       <div class="cm-divider"></div>
       <div class="cm-section">
-        <div class="cm-section-label">❤️ My Favorite Comment <span style="font-size:11px;color:var(--subtext);font-weight:400;">(pick one — becomes your advisor)</span></div>
-        <div id="cmFavNote" class="cm-fav-note">You haven't picked a favorite yet.</div>
+        <div class="cm-section-label">💡 My Insights</div>
+        <textarea class="comment-box" id="studentInsightInput" placeholder="Share your thoughts or reflections on the faculty feedback…" style="min-height:80px;"></textarea>
+        <div class="action-row" style="margin-top:8px;">
+          <button class="save-btn" onclick="saveStudentInsight()">Post Insight</button>
+          <span class="saved-msg" id="insightSavedMsg">✓ Posted</span>
+        </div>
+        <div id="studentInsightsList" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <div class="cm-divider"></div>
+      <div class="cm-section">
+        <div class="cm-section-label">❤️ My Favorites <span style="font-size:11px;color:var(--subtext);font-weight:400;">(heart comments you found most helpful)</span></div>
+        <div id="cmFavNote" class="cm-fav-note"></div>
       </div>
     </div>
 
+    <!-- DELETE (faculty only) -->
     <div id="cmDeleteRow" style="display:none;margin-top:16px;">
       <button class="delete-btn" style="margin-left:0;width:100%;" onclick="askDeleteFromModal()">🗑 Delete This Proposal</button>
     </div>
   </div>
 </div>
 
+<!-- ADD GROUP MODAL -->
 <div class="modal-overlay" id="addModal" onclick="overlayClick(event,'addModal')">
   <div class="modal">
     <div class="modal-header">
@@ -253,7 +293,7 @@
     </div>
     <div class="form-group">
       <label class="form-label">Access PIN <span>*</span></label>
-      <input type="text" class="form-input" id="fPin" placeholder="Create a secure PIN for students (e.g. 1234)"/>
+      <input type="text" class="form-input" id="fPin" placeholder="Create a PIN for students (e.g. 1234)"/>
       <p style="font-size:11px;color:var(--subtext);margin-top:4px;">Students will need this PIN to view their feedback.</p>
     </div>
     <div class="form-group">
@@ -268,6 +308,7 @@
   </div>
 </div>
 
+<!-- DELETE CONFIRM MODAL -->
 <div class="modal-overlay" id="delModal" onclick="overlayClick(event,'delModal')">
   <div class="confirm-modal">
     <div class="confirm-icon">🗑️</div>
@@ -295,6 +336,18 @@
     applyDark(isDark);
   }
   applyDark(localStorage.getItem(DARK_KEY) === 'true');
+
+  function togglePinVisibility() {
+    const input = document.getElementById('studentPinInput');
+    const btn   = document.getElementById('pinEyeBtn');
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      btn.textContent = '👁';
+    }
+  }
 </script>
 </body>
 </html>
