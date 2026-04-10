@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const FAV_KEY = 'cap_favorites_v3';
 
   let groups = [];
+  let faculties = []; 
   let ratings = {};
   let comments = {};
   let favorites = {};
@@ -56,15 +57,56 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await fetchJson(`${API_URL}?t=${Date.now()}`, { method: 'GET' });
 
       groups = (data.projects || []).map(row => ({
-        id: String(row[0] || 'Unknown'),
-        groupNum: String(row[0] || 'N/A').replace(/Group\s*/i, ''),
-        title: String(row[1] || 'Untitled Project'),
-        desc: String(row[2] || 'No description provided.').replace(/\n/g, '<br>'),
-        tag: String(row[3] || 'Other'),
-        stage: String(row[4] || 'Capstone 1'),
-        pin: String(row[5] || ''),
-        thumb: ''
-      }));
+      id: String(row[0] || 'Unknown'),            // Column A (Index 0)
+      groupNum: String(row[0] || 'N/A').replace(/Group\s*/i, ''),
+      title: String(row[1] || 'Untitled Project'), // Column B (Index 1)
+      desc: String(row[2] || 'No description provided.').replace(/\n/g, '<br>'), // Column C (Index 2)
+      tag: String(row[3] || 'Other'),             // Column D (Index 3)
+      stage: String(row[4] || 'Capstone 1'),       // Column E (Index 4)
+      status: String(row[5] || ''),               // Column F (Index 5) - The "Approved" column
+      pin: String(row[6] || ''),                  // Column G (Index 6)
+      thumb: ''
+    }));
+
+      // FILTER: ONLY KEEP APPROVED GROUPS
+      // 💥 BULLETPROOF FILTER: ONLY KEEP APPROVED GROUPS
+      groups = groups.filter(g => {
+        // Strip away all invisible spaces, punctuation, or weird formatting
+        const cleanStatus = String(g.status).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        return cleanStatus === 'approved';
+      });
+
+      // 💥 FIXED FACULTY MAPPING
+      faculties = (data.faculties || []).map(row => {
+        let displayName = "";
+
+        if (Array.isArray(row)) {
+          // 1. Try to get Column B (index 1), fallback to Column A (index 0)
+          displayName = String(row[1] || row[0] || '').trim();
+        } else {
+          // 2. If row is somehow just a string, handle it
+          displayName = String(row || '').trim();
+        }
+
+        // 3. If the data is mushed into one string like "ID,Name,Pin"
+        if (displayName.includes(',')) {
+          let parts = displayName.split(',');
+          // If there's more than one part, usually the name is the second item
+          displayName = parts.length >= 2 ? parts[1].trim() : parts[0].trim();
+        }
+
+        if (!displayName || displayName === "undefined") displayName = "Faculty Member";
+
+        // 4. Create the search string safely for login
+        let searchStr = Array.isArray(row) 
+          ? row.map(c => String(c).replace(/[^a-zA-Z0-9]/g, '').toLowerCase()).join("|||")
+          : String(row).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
+        return {
+          name: displayName,
+          searchString: searchStr
+        };
+      });
 
       ratings = {};
       comments = {};
@@ -73,20 +115,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
       (data.feedback || []).forEach(row => {
         const gid = String(row[0] || '').trim();
-        const name = String(row[2] || '').trim();
-        const rating = Number(row[3] || 0);
-        const text = String(row[4] || '').trim();
-        const dbId = String(row[6] || generateId()).trim();
-        const isFav = String(row[7] || '').trim().toUpperCase() === 'TRUE';
+        const name = String(row[1] || '').trim(); // Official name from DB
+        const rating = Number(row[2] || 0);
+        const text = String(row[3] || '').trim();
+        const dbId = String(row[4] || generateId()).trim();
+        const isFav = String(row[5] || '').trim().toUpperCase() === 'TRUE';
 
         if (!gid) return;
 
         if (!ratings[gid]) ratings[gid] = {};
-        if (rating > 0 && name) ratings[gid][name] = rating;
+        
+        // Use a case-insensitive key for the internal ratings object to be safe
+        if (rating > 0 && name) {
+          ratings[gid][name.toLowerCase()] = rating; 
+        }
 
         if (!comments[gid]) comments[gid] = [];
         comments[gid].push({ id: dbId, name, text, rating });
-
         if (isFav) {
           if (!favorites[gid]) favorites[gid] = [];
           if (!favorites[gid].includes(dbId)) favorites[gid].push(dbId);
@@ -163,7 +208,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     if (!group) {
-      err.textContent = '⚠ Group not found.';
+      err.textContent = '⚠ Group not found or not yet approved.';
       err.style.display = 'block';
       return;
     }
@@ -184,17 +229,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.confirmFacultyName = function() {
     const name = document.getElementById('facultyNameInput').value.trim();
+    const pin = document.getElementById('facultyPinInput').value.trim();
     const err = document.getElementById('nameErr');
 
-    if (!name) {
-      err.textContent = '⚠ Please enter your name.';
+    if (!name || !pin) {
+      err.innerHTML = '⚠ Please enter both your Name and PIN.';
+      err.style.display = 'block';
+      return;
+    }
+
+    if (faculties.length === 0) {
+      err.innerHTML = '<b>⚠ DATABASE EMPTY:</b> No faculty members found. The script might not be deployed correctly.';
+      err.style.display = 'block';
+      return;
+    }
+
+    // 💥 BULLETPROOF LOGIN CHECK 💥
+    const normalizeText = (s) => String(s).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const cleanInputName = normalizeText(name);
+    const cleanInputPin = normalizeText(pin);
+
+    // Search the master string for BOTH the name and the pin anywhere in the row
+    const facultyUser = faculties.find(f => {
+      return f.searchString.includes(cleanInputName) && f.searchString.includes(cleanInputPin);
+    });
+
+    if (!facultyUser) {
+      let debugInfo = faculties.map(f => f.searchString.replace(/\|\|\|/g, " ")).join("<br>");
+      err.innerHTML = `⚠ Login failed. The database is reading these values:<br><span style="font-size:11px; color:#888;">${debugInfo}</span>`;
       err.style.display = 'block';
       return;
     }
 
     err.style.display = 'none';
     currentRole = 'faculty';
-    currentFaculty = name;
+    
+    // 💥 THE FIX: Ignore the database formatting and just use the name you typed!
+    
+    currentFaculty = facultyUser.name;
+    
+    document.getElementById('facultyNameInput').value = '';
+    document.getElementById('facultyPinInput').value = '';
+    
     closeModal('facultyNameModal');
     applyRoleUI();
     renderGrid();
@@ -205,6 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentFaculty = null;
     loggedInStudentId = null;
     document.getElementById('facultyNameInput').value = '';
+    document.getElementById('facultyPinInput').value = '';
     showModal('nameModal');
     closeModal('cardModal');
     applyRoleUI();
@@ -366,7 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('statRated').textContent = rated;
     document.getElementById('statUnrated').textContent = total - rated;
     document.getElementById('enrolledLabel').textContent =
-      `AY 2026–2027 · ${total} group${total !== 1 ? 's' : ''} enrolled`;
+      `AY 2026–2027 · ${total} approved group${total !== 1 ? 's' : ''}`;
   }
 
   function renderGrid() {
@@ -390,7 +467,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const tagPart = activeTag !== 'all' ? ` — ${activeTag}` : '';
       document.getElementById('sectionLabel').textContent = query ? `Results for "${query}"` : stagePart + tagPart;
 
-      function myRating(gid) { return (ratings[gid] || {})[currentFaculty] || 0; }
+        function myRating(gid) { 
+      if (!currentFaculty) return 0;
+      return (ratings[gid] || {})[currentFaculty.toLowerCase()] || 0; 
+    }
       if (activeSort === 'highest') list.sort((a,b) => groupAvgRating(b.id) - groupAvgRating(a.id));
       else if (activeSort === 'lowest') list.sort((a,b) => groupAvgRating(a.id) - groupAvgRating(b.id));
       else if (activeSort === 'highest_mine') list.sort((a,b) => myRating(b.id) - myRating(a.id));
@@ -406,8 +486,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!list.length) {
       grid.innerHTML = `<div class="empty-state">
         <div class="empty-icon">📭</div>
-        <h3>${groups.length ? 'No results found' : 'No groups yet'}</h3>
-        <p>${groups.length ? 'Try a different search or filter.' : 'Click "+ Add Group" to start.'}</p>
+        <h3>${groups.length ? 'No results found' : 'No approved groups yet'}</h3>
+        <p>${groups.length ? 'Try a different search or filter.' : 'Click "+ Add Group" to start adding proposals.'}</p>
       </div>`;
       document.getElementById('pagination').style.display = 'none';
       return;
@@ -439,9 +519,14 @@ document.addEventListener("DOMContentLoaded", () => {
     let reviewedBadge = '';
 
     if (currentRole === 'faculty' && currentFaculty) {
-      const mr = (ratings[g.id] || {})[currentFaculty] || 0;
-      if (mr > 0) reviewedBadge = `<span class="card-reviewed-badge-footer">✓ REVIEWED</span>`;
-    }
+  // Look up using lowercase to ensure it matches regardless of login typing
+  const myNameKey = currentFaculty.toLowerCase();
+  const mr = (ratings[g.id] || {})[myNameKey] || 0;
+  
+  if (mr > 0) {
+    reviewedBadge = `<span class="card-reviewed-badge-footer">✓ REVIEWED</span>`;
+  }
+}
 
     return `
       <div class="card" id="card-${escapeHtml(g.id)}" style="animation-delay:${delay}s">
@@ -547,7 +632,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderFacultySection(gid) {
-    const myRating = (ratings[gid] || {})[currentFaculty] || 0;
+    const myRating = (ratings[gid] || {})[currentFaculty.toLowerCase()] || 0;
     const alreadyRated = myRating > 0;
     const stars = [...document.querySelectorAll('#cmStarRow .star')];
     const labelEl = document.getElementById('facultySectionLabel');
@@ -560,12 +645,14 @@ document.addEventListener("DOMContentLoaded", () => {
           e.stopPropagation();
           const v = +s.dataset.val;
           if (!ratings[gid]) ratings[gid] = {};
-          ratings[gid][currentFaculty] = v;
-          stars.forEach(x => x.classList.toggle('active', +x.dataset.val <= v));
+          ratings[gid][currentFaculty.toLowerCase()] = v;
+           stars.forEach(x => x.classList.toggle('active', +x.dataset.val <= v));
           const avg = groupAvgRating(gid);
           document.getElementById('cmStarsDisplay').innerHTML = starsHTML(avg, 5);
           document.getElementById('cmAvgNum').textContent = avg > 0 ? `${avg.toFixed(1)} / 5` : 'No ratings yet';
+          
           updateStats();
+          renderGrid();
         };
       } else {
         s.style.cursor = 'default';
@@ -584,8 +671,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.saveFacultyFeedback = async function() {
     const gid = viewingGroupId;
     const g = groups.find(x => x.id === gid);
-    const text = document.getElementById('cmComment').value.trim();
-    const myRating = (ratings[gid] || {})[currentFaculty] || 0;
+    const text = document.getElementById('cmComment').value.trim(); 
+    const myRating = (ratings[gid] || {})[currentFaculty.toLowerCase()] || 0;
     const m = document.getElementById('cmSavedMsg');
 
     if (!text && myRating === 0) {
@@ -611,16 +698,23 @@ document.addEventListener("DOMContentLoaded", () => {
           commentId
         })
       });
-
+      // ... inside your saveFacultyFeedback function ...
       if (result.status !== 'success') throw new Error(result.message || 'Save failed');
 
       if (!comments[gid]) comments[gid] = [];
       comments[gid].push({ id: commentId, name: currentFaculty, text, rating: myRating });
+
+      // FIX HERE: Use lowercase for the key
+      if (!ratings[gid]) ratings[gid] = {};
+      ratings[gid][currentFaculty.toLowerCase()] = myRating; 
+
       m.textContent = '✓ Comment Added';
+      // ... rest of your code ...
       m.style.color = '#10b981';
       document.getElementById('cmComment').value = '';
       updateStats();
       setTimeout(() => m.classList.remove('show'), 2000);
+      renderGrid();
     } catch (err) {
       m.textContent = '⚠️ Save failed';
       m.style.color = '#ef4444';
@@ -835,7 +929,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   window.onThumbPick = function(e) {
-    const f = e.target.files[0];
+    const f = e.target.files;
     if (!f) return;
     const r = new FileReader();
     r.onload = ev => {
@@ -896,10 +990,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (result.status !== 'success') throw new Error(result.message || 'Failed to save');
 
-      groups.push(newGroup);
+      alert("Group submitted successfully! It is pending approval and will appear once approved.");
+      
       currentPage = 1;
       closeModal('addModal');
-      renderGrid();
     } catch(e) {
       er.textContent = '⚠️ Failed to save to database.';
       er.style.display = 'block';

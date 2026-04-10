@@ -10,7 +10,7 @@
 </head>
 <body>
 
-<!-- ROLE SELECTION MODALL -->
+<!-- ROLE SELECTION MODAL -->
 <div class="modal-overlay open" id="nameModal">
   <div class="modal" style="max-width:420px;text-align:center;">
     <div style="font-size:40px;margin-bottom:12px;">🎓</div>
@@ -19,21 +19,28 @@
       Choose your role to continue. Faculty members will be asked for their name so comments can be tracked per reviewer.
     </p>
     <div style="display:flex;flex-direction:column;gap:10px;">
-      <button class="btn-primary" style="justify-content:center;padding:12px;" onclick="chooseRole('faculty')">👩‍🏫 I am a Faculty Member</button>
-      <button class="btn-secondary" style="justify-content:center;padding:12px;" onclick="showStudentLogin()">🎓 I am a Student</button>
+      <button class="btn-primary" style="justify-content:center;padding:12px;" onclick="chooseRole('faculty')"> I am a Faculty Member</button>
+      <button class="btn-secondary" style="justify-content:center;padding:12px;" onclick="showStudentLogin()"> I am a Student</button>
     </div>
   </div>
 </div>
 
-<!-- FACULTY NAME MODAL -->
+<!-- FACULTY LOGIN MODAL (UPDATED WITH PIN) -->
 <div class="modal-overlay" id="facultyNameModal">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header">
-      <div class="modal-title">👩‍🏫 Enter Your Name</div>
+      <div class="modal-title">👩‍🏫 Faculty Access</div>
     </div>
     <div class="form-group">
       <label class="form-label">Full Name <span>*</span></label>
       <input class="form-input" id="facultyNameInput" placeholder="e.g. Dr. Maria Santos" maxlength="60"/>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Access PIN <span>*</span></label>
+      <div class="pin-input-wrap">
+        <input type="password" class="form-input" id="facultyPinInput" placeholder="Enter your 4-digit PIN" maxlength="10"/>
+        <button type="button" class="pin-eye-btn" id="facPinEyeBtn" onclick="toggleFacPinVisibility()" title="Show/hide PIN">👁</button>
+      </div>
     </div>
     <p class="form-error" id="nameErr" style="display:none;margin-top:-10px;margin-bottom:4px;"></p>
     <div class="modal-footer">
@@ -340,6 +347,18 @@
   function togglePinVisibility() {
     const input = document.getElementById('studentPinInput');
     const btn   = document.getElementById('pinEyeBtn');
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      btn.textContent = '👁';
+    }
+  }
+
+  function toggleFacPinVisibility() {
+    const input = document.getElementById('facultyPinInput');
+    const btn   = document.getElementById('facPinEyeBtn');
     if (input.type === 'password') {
       input.type = 'text';
       btn.textContent = '🙈';
