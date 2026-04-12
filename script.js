@@ -1,10 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_URL = 'https://script.google.com/macros/s/AKfycbzzZDzBiZDib_re6rZ91FYg6uNkyEsB5uZMCpKyKym2N8v2cZpVBMGvu5DElOvz5IOQhg/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbwtiZtSabHjmZK6KdX0ulw3R1pb2kEYN3FBDhDH7A47n8iFiozftUGe7S7o65huSuFpgQ/exec';
 
   const FAV_KEY = 'cap_favorites_v3';
 
   let groups = [];
-  let faculties = []; 
+  let faculties = [];
   let ratings = {};
   let comments = {};
   let favorites = {};
@@ -28,108 +28,68 @@ document.addEventListener("DOMContentLoaded", () => {
   async function fetchJson(url, options = {}) {
     const res = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-        ...(options.headers || {})
-      }
+      headers: { 'Content-Type': 'text/plain;charset=utf-8', ...(options.headers || {}) }
     });
-
     const text = await res.text();
     let data = {};
-    try {
-      data = text ? JSON.parse(text) : {};
-    } catch (e) {
-      throw new Error('Invalid JSON response: ' + text);
-    }
-
-    if (!res.ok) {
-      throw new Error(data.message || `HTTP ${res.status}`);
-    }
-
+    try { data = text ? JSON.parse(text) : {}; } catch (e) { throw new Error('Invalid JSON response: ' + text); }
+    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
     return data;
   }
 
   async function loadDatabase() {
     const enrolledLabel = document.getElementById('enrolledLabel');
     enrolledLabel.textContent = 'Loading database…';
-
     try {
       const data = await fetchJson(`${API_URL}?t=${Date.now()}`, { method: 'GET' });
 
       groups = (data.projects || []).map(row => ({
-      id: String(row[0] || 'Unknown'),            // Column A (Index 0)
-      groupNum: String(row[0] || 'N/A').replace(/Group\s*/i, ''),
-      title: String(row[1] || 'Untitled Project'), // Column B (Index 1)
-      desc: String(row[2] || 'No description provided.').replace(/\n/g, '<br>'), // Column C (Index 2)
-      tag: String(row[3] || 'Other'),             // Column D (Index 3)
-      stage: String(row[4] || 'Capstone 1'),       // Column E (Index 4)
-      status: String(row[5] || ''),               // Column F (Index 5) - The "Approved" column
-      pin: String(row[6] || ''),                  // Column G (Index 6)
-      thumb: ''
-    }));
+        id: String(row[0] || 'Unknown'),
+        groupNum: String(row[0] || 'N/A').replace(/Group\s*/i, ''),
+        title: String(row[1] || 'Untitled Project'),
+        desc: String(row[2] || 'No description provided.').replace(/\n/g, '<br>'),
+        tag: String(row[3] || 'Other'),
+        stage: String(row[4] || 'Capstone 1'),
+        status: String(row[5] || ''),
+        pin: String(row[6] || ''),
+        thumb: String(row[7] || '').trim()
+      }));
 
-      // FILTER: ONLY KEEP APPROVED GROUPS
-      // 💥 BULLETPROOF FILTER: ONLY KEEP APPROVED GROUPS
       groups = groups.filter(g => {
-        // Strip away all invisible spaces, punctuation, or weird formatting
         const cleanStatus = String(g.status).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
         return cleanStatus === 'approved';
       });
 
-      // 💥 FIXED FACULTY MAPPING
       faculties = (data.faculties || []).map(row => {
-        let displayName = "";
-
+        let displayName = '';
         if (Array.isArray(row)) {
-          // 1. Try to get Column B (index 1), fallback to Column A (index 0)
           displayName = String(row[1] || row[0] || '').trim();
         } else {
-          // 2. If row is somehow just a string, handle it
           displayName = String(row || '').trim();
         }
-
-        // 3. If the data is mushed into one string like "ID,Name,Pin"
         if (displayName.includes(',')) {
           let parts = displayName.split(',');
-          // If there's more than one part, usually the name is the second item
           displayName = parts.length >= 2 ? parts[1].trim() : parts[0].trim();
         }
-
-        if (!displayName || displayName === "undefined") displayName = "Faculty Member";
-
-        // 4. Create the search string safely for login
-        let searchStr = Array.isArray(row) 
-          ? row.map(c => String(c).replace(/[^a-zA-Z0-9]/g, '').toLowerCase()).join("|||")
+        if (!displayName || displayName === 'undefined') displayName = 'Faculty Member';
+        let searchStr = Array.isArray(row)
+          ? row.map(c => String(c).replace(/[^a-zA-Z0-9]/g, '').toLowerCase()).join('|||')
           : String(row).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-
-        return {
-          name: displayName,
-          searchString: searchStr
-        };
+        return { name: displayName, searchString: searchStr };
       });
 
-      ratings = {};
-      comments = {};
-      favorites = {};
-      insights = {};
+      ratings = {}; comments = {}; favorites = {}; insights = {};
 
       (data.feedback || []).forEach(row => {
-        const gid = String(row[0] || '').trim();
-        const name = String(row[1] || '').trim(); // Official name from DB
-        const rating = Number(row[2] || 0);
-        const text = String(row[3] || '').trim();
-        const dbId = String(row[4] || generateId()).trim();
-        const isFav = String(row[5] || '').trim().toUpperCase() === 'TRUE';
-
+        const gid    = String(row[0] || '').trim();   // A groupId
+        const name   = String(row[2] || '').trim();   // C facultyName
+        const rating = Number(row[3] || 0);           // D rating
+        const text   = String(row[4] || '').trim();   // E comment
+        const dbId   = String(row[6] || generateId()).trim(); // G commentId
+        const isFav  = String(row[7] || '').trim().toUpperCase() === 'TRUE'; // H isFavorite
         if (!gid) return;
-
         if (!ratings[gid]) ratings[gid] = {};
-        
-        // Use a case-insensitive key for the internal ratings object to be safe
-        if (rating > 0 && name) {
-          ratings[gid][name.toLowerCase()] = rating; 
-        }
-
+        if (rating > 0 && name) ratings[gid][name.toLowerCase()] = rating;
         if (!comments[gid]) comments[gid] = [];
         comments[gid].push({ id: dbId, name, text, rating });
         if (isFav) {
@@ -139,10 +99,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       (data.insights || []).forEach(item => {
-        const gid = String(item.groupId || '').trim();
+        const gid  = String(item.groupId || '').trim();
         const text = String(item.text || '').trim();
-        const ts = String(item.ts || '').trim();
-
+        const ts   = String(item.ts || '').trim();
         if (!gid || !text) return;
         if (!insights[gid]) insights[gid] = [];
         insights[gid].push({ text, ts });
@@ -152,26 +111,68 @@ document.addEventListener("DOMContentLoaded", () => {
       renderGrid();
     } catch (err) {
       console.error('DB load error:', err);
-      enrolledLabel.textContent = '⚠️ Error connecting to database.';
+      document.getElementById('enrolledLabel').textContent = '⚠️ Error connecting to database.';
     }
   }
 
   loadDatabase();
 
-  let currentRole = null;
-  let currentFaculty = null;
+  let currentRole       = null;
+  let currentFaculty    = null;
   let loggedInStudentId = null;
-  let viewingGroupId = null;
-  let pendingDel = null;
-  let thumbData = null;
+  let viewingGroupId    = null;
+  let pendingDel        = null;
+  let thumbData         = null;
+  let studentThumbData  = null;
 
   let activeStage = 'all';
-  let activeTag = 'all';
-  let activeSort = 'default';
-  let query = '';
+  let activeTag   = 'all';
+  let activeSort  = 'default';
+  let query       = '';
   let currentPage = 1;
   const PAGE_SIZE = 10;
 
+  // ── Student thumb pick ──
+window.onStudentThumbPick = function(e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      const MAX_SIZE = 800; // Dropped to 800 for safety
+      if (width > height) {
+        if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+      } else {
+        if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      studentThumbData = canvas.toDataURL('image/jpeg', 0.6); // 60% quality is plenty for thumbnails
+      document.getElementById('studentThumbPreview').src = studentThumbData;
+      document.getElementById('studentThumbPreview').classList.add('show');
+      document.getElementById('studentRemoveThumbBtn').style.display = 'inline-block';
+    };
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(f);
+};
+
+
+  window.clearStudentThumb = function() {
+    studentThumbData = '';
+    const p = document.getElementById('studentThumbPreview');
+    p.src = ''; p.classList.remove('show');
+    document.getElementById('studentThumbFile').value = '';
+    document.getElementById('studentRemoveThumbBtn').style.display = 'none';
+  };
+
+  // ── Role selection ──
   window.chooseRole = function(role) {
     if (role === 'faculty') {
       closeModal('nameModal');
@@ -187,38 +188,18 @@ document.addEventListener("DOMContentLoaded", () => {
     showModal('studentLoginModal');
     document.getElementById('studentLoginErr').style.display = 'none';
     document.getElementById('studentGroupInput').value = '';
-    document.getElementById('studentPinInput').value = '';
+    document.getElementById('studentPinInput').value  = '';
     setTimeout(() => document.getElementById('studentGroupInput').focus(), 300);
   };
 
   window.verifyStudentLogin = function() {
     const gNum = document.getElementById('studentGroupInput').value.trim();
-    const pin = document.getElementById('studentPinInput').value.trim();
-    const err = document.getElementById('studentLoginErr');
-
-    if (!gNum || !pin) {
-      err.textContent = '⚠ Please enter both Group Number and PIN.';
-      err.style.display = 'block';
-      return;
-    }
-
-    const group = groups.find(g =>
-      g.id.toLowerCase() === gNum.toLowerCase() ||
-      g.groupNum.toLowerCase() === gNum.toLowerCase()
-    );
-
-    if (!group) {
-      err.textContent = '⚠ Group not found or not yet approved.';
-      err.style.display = 'block';
-      return;
-    }
-
-    if (String(group.pin).trim() !== String(pin).trim()) {
-      err.textContent = '⚠ Incorrect PIN. Contact your instructor.';
-      err.style.display = 'block';
-      return;
-    }
-
+    const pin  = document.getElementById('studentPinInput').value.trim();
+    const err  = document.getElementById('studentLoginErr');
+    if (!gNum || !pin) { err.textContent = '⚠ Please enter both Group Number and PIN.'; err.style.display = 'block'; return; }
+    const group = groups.find(g => g.id.toLowerCase() === gNum.toLowerCase() || g.groupNum.toLowerCase() === gNum.toLowerCase());
+    if (!group) { err.textContent = '⚠ Group not found or not yet approved.'; err.style.display = 'block'; return; }
+    if (String(group.pin).trim() !== String(pin).trim()) { err.textContent = '⚠ Incorrect PIN. Contact your instructor.'; err.style.display = 'block'; return; }
     err.style.display = 'none';
     currentRole = 'student';
     loggedInStudentId = group.id;
@@ -229,104 +210,77 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.confirmFacultyName = function() {
     const name = document.getElementById('facultyNameInput').value.trim();
-    const pin = document.getElementById('facultyPinInput').value.trim();
-    const err = document.getElementById('nameErr');
-
-    if (!name || !pin) {
-      err.innerHTML = '⚠ Please enter both your Name and PIN.';
-      err.style.display = 'block';
-      return;
-    }
-
-    if (faculties.length === 0) {
-      err.innerHTML = '<b>⚠ DATABASE EMPTY:</b> No faculty members found. The script might not be deployed correctly.';
-      err.style.display = 'block';
-      return;
-    }
-
-    // 💥 BULLETPROOF LOGIN CHECK 💥
-    const normalizeText = (s) => String(s).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    const cleanInputName = normalizeText(name);
-    const cleanInputPin = normalizeText(pin);
-
-    // Search the master string for BOTH the name and the pin anywhere in the row
-    const facultyUser = faculties.find(f => {
-      return f.searchString.includes(cleanInputName) && f.searchString.includes(cleanInputPin);
-    });
-
+    const pin  = document.getElementById('facultyPinInput').value.trim();
+    const err  = document.getElementById('nameErr');
+    if (!name || !pin) { err.innerHTML = '⚠ Please enter both your Name and PIN.'; err.style.display = 'block'; return; }
+    if (faculties.length === 0) { err.innerHTML = '<b>⚠ DATABASE EMPTY:</b> No faculty members found.'; err.style.display = 'block'; return; }
+    const normalize = s => String(s).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const cleanName = normalize(name), cleanPin = normalize(pin);
+    const facultyUser = faculties.find(f => f.searchString.includes(cleanName) && f.searchString.includes(cleanPin));
     if (!facultyUser) {
-      let debugInfo = faculties.map(f => f.searchString.replace(/\|\|\|/g, " ")).join("<br>");
-      err.innerHTML = `⚠ Login failed. The database is reading these values:<br><span style="font-size:11px; color:#888;">${debugInfo}</span>`;
+      let debugInfo = faculties.map(f => f.searchString.replace(/\|\|\|/g, ' ')).join('<br>');
+      err.innerHTML = `⚠ Login failed. The database is reading these values:<br><span style="font-size:11px;color:#888;">${debugInfo}</span>`;
       err.style.display = 'block';
       return;
     }
-
     err.style.display = 'none';
-    currentRole = 'faculty';
-    
-    // 💥 THE FIX: Ignore the database formatting and just use the name you typed!
-    
+    currentRole    = 'faculty';
     currentFaculty = facultyUser.name;
-    
     document.getElementById('facultyNameInput').value = '';
-    document.getElementById('facultyPinInput').value = '';
-    
+    document.getElementById('facultyPinInput').value  = '';
     closeModal('facultyNameModal');
     applyRoleUI();
     renderGrid();
   };
 
   window.switchRole = function() {
-    currentRole = null;
-    currentFaculty = null;
-    loggedInStudentId = null;
+    currentRole = null; currentFaculty = null; loggedInStudentId = null;
     document.getElementById('facultyNameInput').value = '';
-    document.getElementById('facultyPinInput').value = '';
+    document.getElementById('facultyPinInput').value  = '';
     showModal('nameModal');
     closeModal('cardModal');
     applyRoleUI();
   };
 
   function applyRoleUI() {
-    const badge = document.getElementById('roleBadge');
-    const fc = document.getElementById('facultyControls');
-    const rl = document.getElementById('roleLabel');
-    const searchBox = document.querySelector('.search-box');
-    const tagFilter = document.getElementById('tagFilterWrap');
-    const sortWrap = document.getElementById('sortWrap');
-    const statsBar = document.querySelector('.stats-bar');
+    const badge      = document.getElementById('roleBadge');
+    const fc         = document.getElementById('facultyControls');
+    const rl         = document.getElementById('roleLabel');
+    const searchBox  = document.querySelector('.search-box');
+    const tagFilter  = document.getElementById('tagFilterWrap');
+    const sortWrap   = document.getElementById('sortWrap');
+    const statsBar   = document.querySelector('.stats-bar');
     const filterTabs = document.querySelector('.filter-tabs');
 
     if (currentRole === 'faculty') {
-      badge.textContent = `👩‍🏫 ${currentFaculty} · Switch`;
-      badge.className = 'role-badge faculty';
-      fc.style.display = 'flex';
-      rl.textContent = `Faculty view — logged in as ${currentFaculty}`;
+      badge.textContent = `${currentFaculty} · Switch`;
+      badge.className   = 'role-badge faculty';
+      fc.style.display  = 'flex';
+      rl.textContent    = `Faculty view — logged in as ${currentFaculty}`;
       [searchBox, tagFilter, statsBar, filterTabs].forEach(el => { if (el) el.style.display = ''; });
       if (sortWrap) sortWrap.style.display = 'block';
     } else if (currentRole === 'student') {
       badge.textContent = '🎓 Student View · Switch';
-      badge.className = 'role-badge student';
-      fc.style.display = 'none';
-      rl.textContent = 'Student view — read only';
+      badge.className   = 'role-badge student';
+      fc.style.display  = 'none';
+      rl.textContent    = 'Student view — read only';
       [searchBox, tagFilter, statsBar, filterTabs].forEach(el => { if (el) el.style.display = 'none'; });
       if (sortWrap) sortWrap.style.display = 'none';
     } else {
       badge.textContent = '';
-      fc.style.display = 'none';
+      fc.style.display  = 'none';
       [searchBox, tagFilter, statsBar, filterTabs].forEach(el => { if (el) el.style.display = ''; });
       if (sortWrap) sortWrap.style.display = 'none';
     }
   }
 
+  // ── SVG thumbs ──
   const TC = [['#eef2ff','#c7d2fe'],['#d1fae5','#a7f3d0'],['#fef3c7','#fde68a'],
               ['#fee2e2','#fecaca'],['#ede9fe','#ddd6fe'],['#fce7f3','#fbcfe8'],['#dbeafe','#bfdbfe']];
   const TI = ['💡','📊','🖥️','🔬','🌐','📱','🤖','🔧','📡','🛰️','🧬','🗺️'];
 
   function svgThumb(i) {
-    const [c1,c2] = TC[i % TC.length];
-    const ic = TI[i % TI.length];
-    const uid = 'sv' + i;
+    const [c1,c2] = TC[i%TC.length], ic = TI[i%TI.length], uid = 'sv'+i;
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 202">
         <defs><linearGradient id="${uid}" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -334,36 +288,31 @@ document.addEventListener("DOMContentLoaded", () => {
         </linearGradient></defs>
         <rect width="360" height="202" fill="url(#${uid})"/>
         <text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" font-size="48">${ic}</text>
-      </svg>`
-    );
+      </svg>`);
   }
 
   function groupAvgRating(gid) {
     const r = ratings[gid];
     if (!r) return 0;
     const vals = Object.values(r).filter(v => v > 0);
-    return vals.length ? vals.reduce((a,b) => a + b, 0) / vals.length : 0;
+    return vals.length ? vals.reduce((a,b) => a+b, 0) / vals.length : 0;
   }
 
-  function groupAllComments(gid) {
-    return comments[gid] || [];
-  }
+  function groupAllComments(gid) { return comments[gid] || []; }
 
-  function starsHTML(val, max = 5) {
-    return Array.from({ length: max }, (_, i) =>
+  function starsHTML(val, max=5) {
+    return Array.from({length:max}, (_,i) =>
       `<span class="star-disp${i < Math.round(val) ? ' lit' : ''}">★</span>`
     ).join('');
   }
 
+  // ── Search / Filter / Sort ──
   document.getElementById('searchInput').addEventListener('input', function() {
-    query = this.value.trim().toLowerCase();
-    currentPage = 1;
-    renderGrid();
+    query = this.value.trim().toLowerCase(); currentPage = 1; renderGrid();
   });
 
   window.setStage = function(stage) {
-    activeStage = stage;
-    currentPage = 1;
+    activeStage = stage; currentPage = 1;
     document.querySelectorAll('.filter-tab').forEach(b => b.classList.toggle('active', b.dataset.stage === stage));
     renderGrid();
   };
@@ -377,22 +326,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function buildTagDropdown() {
     const used = [...new Set(groups.map(g => g.tag).filter(Boolean))].sort();
-    const dd = document.getElementById('tagDropdown');
+    const dd   = document.getElementById('tagDropdown');
     dd.innerHTML = [
-      `<button class="tag-option${activeTag === 'all' ? ' active' : ''}" onclick="setTagFilter('all')">🏷 All Tags</button>`,
-      ...used.map(t => `<button class="tag-option${activeTag === t ? ' active' : ''}" onclick="setTagFilter('${t.replace(/'/g, "\\'")}')">${escapeHtml(t)}</button>`)
+      `<button class="tag-option${activeTag==='all'?' active':''}" onclick="setTagFilter('all')">All Tags</button>`,
+      ...used.map(t => `<button class="tag-option${activeTag===t?' active':''}" onclick="setTagFilter('${t.replace(/'/g,"\\'")}') ">${escapeHtml(t)}</button>`)
     ].join('');
     if (!used.length) dd.innerHTML += `<span class="tag-dropdown-empty">No tags yet.</span>`;
   }
 
   window.setTagFilter = function(tag) {
     activeTag = tag;
-    document.getElementById('tagFilterLabel').textContent = tag === 'all' ? '🏷 All Tags' : '🏷 ' + tag;
+    document.getElementById('tagFilterLabel').textContent = tag === 'all' ? 'All Tags' : + tag;
     document.getElementById('tagFilterBtn').classList.toggle('active-filter', tag !== 'all');
     document.getElementById('tagFilterBtn').classList.remove('open');
     document.getElementById('tagDropdown').classList.remove('open');
-    currentPage = 1;
-    renderGrid();
+    currentPage = 1; renderGrid();
   };
 
   window.toggleSortDropdown = function() {
@@ -402,53 +350,35 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('tagDropdown').classList.remove('open');
   };
 
-  const SORT_LABELS = {
-    default: '↕ Sort: Default',
-    highest: 'Top Rated',
-    lowest: 'Lowest Rated',
-    highest_mine: 'My Highest',
-    needs_rating: 'Pending Review'
-  };
+  const SORT_LABELS = { default:'↕ Sort: Default', highest:'Top Rated', lowest:'Lowest Rated', highest_mine:'My Highest', needs_rating:'Pending Review' };
 
   window.setSort = function(sortType) {
     activeSort = sortType;
     document.getElementById('sortFilterLabel').textContent = SORT_LABELS[sortType] || '↕ Sort: Default';
     document.getElementById('sortFilterBtn').classList.toggle('active-filter', sortType !== 'default');
-    document.querySelectorAll('#sortDropdown .tag-option').forEach(o => {
-      o.classList.toggle('active', o.dataset.sort === sortType);
-    });
+    document.querySelectorAll('#sortDropdown .tag-option').forEach(o => o.classList.toggle('active', o.dataset.sort === sortType));
     document.getElementById('sortFilterBtn').classList.remove('open');
     document.getElementById('sortDropdown').classList.remove('open');
-    currentPage = 1;
-    renderGrid();
+    currentPage = 1; renderGrid();
   };
 
   document.addEventListener('click', e => {
-    const tagWrap = document.getElementById('tagFilterWrap');
+    const tagWrap  = document.getElementById('tagFilterWrap');
     const sortWrap = document.getElementById('sortWrap');
-    if (tagWrap && !tagWrap.contains(e.target)) {
-      document.getElementById('tagFilterBtn').classList.remove('open');
-      document.getElementById('tagDropdown').classList.remove('open');
-    }
-    if (sortWrap && !sortWrap.contains(e.target)) {
-      document.getElementById('sortFilterBtn').classList.remove('open');
-      document.getElementById('sortDropdown').classList.remove('open');
-    }
+    if (tagWrap  && !tagWrap.contains(e.target))  { document.getElementById('tagFilterBtn').classList.remove('open'); document.getElementById('tagDropdown').classList.remove('open'); }
+    if (sortWrap && !sortWrap.contains(e.target)) { document.getElementById('sortFilterBtn').classList.remove('open'); document.getElementById('sortDropdown').classList.remove('open'); }
   });
 
   function updateStats() {
-    const total = groups.length;
-    const rated = groups.filter(g => groupAvgRating(g.id) > 0).length;
-    document.getElementById('statTotal').textContent = total;
-    document.getElementById('statRated').textContent = rated;
+    const total = groups.length, rated = groups.filter(g => groupAvgRating(g.id) > 0).length;
+    document.getElementById('statTotal').textContent   = total;
+    document.getElementById('statRated').textContent   = rated;
     document.getElementById('statUnrated').textContent = total - rated;
-    document.getElementById('enrolledLabel').textContent =
-      `AY 2026–2027 · ${total} approved group${total !== 1 ? 's' : ''}`;
+    document.getElementById('enrolledLabel').textContent = `AY 2026–2027 · ${total} approved group${total!==1?'s':''}`;
   }
 
   function renderGrid() {
-    updateStats();
-    buildTagDropdown();
+    updateStats(); buildTagDropdown();
     const grid = document.getElementById('cardGrid');
     let list = groups;
 
@@ -458,184 +388,207 @@ document.addEventListener("DOMContentLoaded", () => {
       grid.style.cssText = 'display:flex;justify-content:center;align-items:flex-start;padding-top:40px;min-height:300px;';
     } else {
       if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
-      if (activeTag !== 'all') list = list.filter(g => g.tag === activeTag);
-      if (query) list = list.filter(g =>
-        g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query)
-      );
-
+      if (activeTag   !== 'all') list = list.filter(g => g.tag   === activeTag);
+      if (query) list = list.filter(g => g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query));
       const stagePart = activeStage === 'all' ? 'All Projects' : activeStage;
-      const tagPart = activeTag !== 'all' ? ` — ${activeTag}` : '';
+      const tagPart   = activeTag   !== 'all' ? ` — ${activeTag}` : '';
       document.getElementById('sectionLabel').textContent = query ? `Results for "${query}"` : stagePart + tagPart;
-
-        function myRating(gid) { 
-      if (!currentFaculty) return 0;
-      return (ratings[gid] || {})[currentFaculty.toLowerCase()] || 0; 
-    }
-      if (activeSort === 'highest') list.sort((a,b) => groupAvgRating(b.id) - groupAvgRating(a.id));
-      else if (activeSort === 'lowest') list.sort((a,b) => groupAvgRating(a.id) - groupAvgRating(b.id));
+      function myRating(gid) { if (!currentFaculty) return 0; return (ratings[gid]||{})[currentFaculty.toLowerCase()]||0; }
+      if      (activeSort === 'highest')      list.sort((a,b) => groupAvgRating(b.id) - groupAvgRating(a.id));
+      else if (activeSort === 'lowest')       list.sort((a,b) => groupAvgRating(a.id) - groupAvgRating(b.id));
       else if (activeSort === 'highest_mine') list.sort((a,b) => myRating(b.id) - myRating(a.id));
-      else if (activeSort === 'needs_rating') {
-        list.sort((a,b) => {
-          const ra = myRating(a.id), rb = myRating(b.id);
-          return (ra === 0 && rb > 0) ? -1 : (rb === 0 && ra > 0) ? 1 : 0;
-        });
-      }
+      else if (activeSort === 'needs_rating') list.sort((a,b) => { const ra=myRating(a.id),rb=myRating(b.id); return (ra===0&&rb>0)?-1:(rb===0&&ra>0)?1:0; });
       grid.style.cssText = '';
     }
 
     if (!list.length) {
-      grid.innerHTML = `<div class="empty-state">
-        <div class="empty-icon">📭</div>
-        <h3>${groups.length ? 'No results found' : 'No approved groups yet'}</h3>
-        <p>${groups.length ? 'Try a different search or filter.' : 'Click "+ Add Group" to start adding proposals.'}</p>
-      </div>`;
+      grid.innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div><h3>${groups.length?'No results found':'No approved groups yet'}</h3><p>${groups.length?'Try a different search or filter.':'Click "+ Add Group" to start adding proposals.'}</p></div>`;
       document.getElementById('pagination').style.display = 'none';
       return;
     }
 
     const totalPages = Math.ceil(list.length / PAGE_SIZE);
     if (currentPage > totalPages) currentPage = totalPages;
-    const start = (currentPage - 1) * PAGE_SIZE;
+    const start    = (currentPage - 1) * PAGE_SIZE;
     const pageList = list.slice(start, start + PAGE_SIZE);
 
-    grid.innerHTML = pageList.map((g,i) => cardHTML(g, start + i)).join('');
+    grid.innerHTML = pageList.map((g,i) => cardHTML(g, start+i)).join('');
     pageList.forEach(g => {
       const el = document.getElementById('card-' + g.id);
       if (el) el.addEventListener('click', () => openCardModal(g.id));
     });
 
-    if (currentRole === 'student') {
-      document.getElementById('pagination').style.display = 'none';
-    } else {
-      renderPagination(list.length, totalPages);
-    }
+    if (currentRole === 'student') { document.getElementById('pagination').style.display = 'none'; }
+    else { renderPagination(list.length, totalPages); }
   }
 
   function cardHTML(g, i) {
     const thumb = g.thumb || svgThumb(i);
-    const avg = groupAvgRating(g.id);
-    const delay = Math.min(i * 0.05, 0.5);
+    const avg   = groupAvgRating(g.id);
+    const delay = Math.min(i*0.05, 0.5);
     const commentCount = groupAllComments(g.id).length;
     let reviewedBadge = '';
-
     if (currentRole === 'faculty' && currentFaculty) {
-  // Look up using lowercase to ensure it matches regardless of login typing
-  const myNameKey = currentFaculty.toLowerCase();
-  const mr = (ratings[g.id] || {})[myNameKey] || 0;
-  
-  if (mr > 0) {
-    reviewedBadge = `<span class="card-reviewed-badge-footer">✓ REVIEWED</span>`;
-  }
-}
-
+      const mr = (ratings[g.id]||{})[currentFaculty.toLowerCase()]||0;
+      if (mr > 0) reviewedBadge = `<span class="card-reviewed-badge-footer">✓ REVIEWED</span>`;
+    }
     return `
-      <div class="card" id="card-${escapeHtml(g.id)}" style="animation-delay:${delay}s">
-        <div class="card-thumb">
-          <img src="${thumb}" alt="${escapeHtml(g.title)}" onerror="this.src='${svgThumb(i)}'"/>
-          <div class="thumb-badge">${escapeHtml(g.tag || '—')}</div>
-        </div>
-        <div class="card-body">
-          <div class="card-group-num">Group ${escapeHtml(g.groupNum)}</div>
-          <div class="card-title">${escapeHtml(g.title)}</div>
-          <div class="card-desc">${g.desc}</div>
-        </div>
-        <div class="card-footer">
-          <div class="card-footer-stars">${starsHTML(avg)}</div>
-          <div class="card-footer-meta">
-            ${reviewedBadge}
-            ${avg > 0 ? `<span class="card-avg">${avg.toFixed(1)}</span>` : '<span class="card-unrated">Unrated</span>'}
-            ${commentCount > 0 ? `<span class="card-comment-count">💬 ${commentCount}</span>` : ''}
-          </div>
+    <div class="card" id="card-${escapeHtml(g.id)}" style="animation-delay:${delay}s">
+      <div class="card-thumb">
+        <img src="${thumb}" alt="${escapeHtml(g.title)}" onerror="this.src='${svgThumb(i)}'"/>
+        <div class="thumb-badge">${escapeHtml(g.tag||'—')}</div>
+      </div>
+      <div class="card-body">
+        ${currentRole==='faculty'?'':`<div class="card-group-num">Group ${escapeHtml(g.groupNum)}</div>`}
+        <div class="card-title">${escapeHtml(g.title)}</div>
+        <div class="card-desc">${g.desc}</div>
+      </div>
+      <div class="card-footer">
+        <div class="card-footer-stars">${starsHTML(avg)}</div>
+        <div class="card-footer-meta">
+          ${reviewedBadge}
+          ${avg>0?`<span class="card-avg">${avg.toFixed(1)}</span>`:'<span class="card-unrated">Unrated</span>'}
+          ${commentCount>0?`<span class="card-comment-count">💬 ${commentCount}</span>`:''}
         </div>
       </div>
-    `;
+    </div>`;
   }
 
   function renderPagination(total, totalPages) {
     const bar = document.getElementById('pagination');
-    if (totalPages <= 1) {
-      bar.style.display = 'none';
-      return;
-    }
-
+    if (totalPages <= 1) { bar.style.display = 'none'; return; }
     bar.style.display = 'flex';
-    const s = (currentPage - 1) * PAGE_SIZE + 1;
-    const e = Math.min(currentPage * PAGE_SIZE, total);
+    const s = (currentPage-1)*PAGE_SIZE+1, e = Math.min(currentPage*PAGE_SIZE, total);
     document.getElementById('paginationInfo').textContent = `Showing ${s}–${e} of ${total} groups`;
     document.getElementById('prevBtn').disabled = currentPage === 1;
     document.getElementById('nextBtn').disabled = currentPage === totalPages;
-
-    const range = [];
-    const delta = 2;
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= currentPage - delta && i <= currentPage + delta)) range.push(i);
-    }
-
-    const withEll = [];
-    let prev = null;
-    for (const p of range) {
-      if (prev !== null && p - prev > 1) withEll.push('…');
-      withEll.push(p);
-      prev = p;
-    }
-
+    const range = [], delta = 2;
+    for (let i=1; i<=totalPages; i++) { if (i===1||i===totalPages||(i>=currentPage-delta&&i<=currentPage+delta)) range.push(i); }
+    const withEll = []; let prev = null;
+    for (const p of range) { if (prev!==null&&p-prev>1) withEll.push('…'); withEll.push(p); prev=p; }
     document.getElementById('pageNumbers').innerHTML = withEll.map(p =>
-      p === '…'
-        ? `<span class="page-ellipsis">…</span>`
-        : `<button class="page-num${p === currentPage ? ' active' : ''}" onclick="goToPage(${p})">${p}</button>`
+      p==='…' ? `<span class="page-ellipsis">…</span>`
+              : `<button class="page-num${p===currentPage?' active':''}" onclick="goToPage(${p})">${p}</button>`
     ).join('');
   }
 
   window.changePage = function(dir) {
     let list = groups;
-    if (activeStage !== 'all') list = list.filter(g => g.stage === activeStage);
-    if (activeTag !== 'all') list = list.filter(g => g.tag === activeTag);
-    if (query) list = list.filter(g => g.title.toLowerCase().includes(query) || g.groupNum.toLowerCase().includes(query));
-    const tp = Math.ceil(list.length / PAGE_SIZE);
-    currentPage = Math.max(1, Math.min(currentPage + dir, tp));
-    renderGrid();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (activeStage!=='all') list=list.filter(g=>g.stage===activeStage);
+    if (activeTag!=='all')   list=list.filter(g=>g.tag===activeTag);
+    if (query) list=list.filter(g=>g.title.toLowerCase().includes(query)||g.groupNum.toLowerCase().includes(query));
+    const tp = Math.ceil(list.length/PAGE_SIZE);
+    currentPage = Math.max(1, Math.min(currentPage+dir, tp));
+    renderGrid(); window.scrollTo({top:0,behavior:'smooth'});
   };
+  window.goToPage = function(p) { currentPage=p; renderGrid(); window.scrollTo({top:0,behavior:'smooth'}); };
 
-  window.goToPage = function(p) {
-    currentPage = p;
-    renderGrid();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
+  // ── Card Modal ──
   function openCardModal(gid) {
     const g = groups.find(x => x.id === gid);
     if (!g) return;
-
     viewingGroupId = gid;
-    const i = groups.indexOf(g);
+    const i   = groups.indexOf(g);
     const avg = groupAvgRating(gid);
 
     document.getElementById('cmTitle').textContent = g.title;
-    document.getElementById('cmGroupNum').textContent = `Group ${g.groupNum}`;
+
+    const cmGroupNum = document.getElementById('cmGroupNum');
+    if (currentRole === 'faculty') { cmGroupNum.textContent = ''; cmGroupNum.style.display = 'none'; }
+    else { cmGroupNum.textContent = `Group ${g.groupNum}`; cmGroupNum.style.display = ''; }
+
     document.getElementById('cmStage').textContent = g.stage || '—';
-    document.getElementById('cmTag').textContent = g.tag || '—';
-    document.getElementById('cmDesc').innerHTML = g.desc;
-    document.getElementById('cmThumb').src = g.thumb || svgThumb(i);
+    document.getElementById('cmTag').textContent   = g.tag   || '—';
+    document.getElementById('cmDesc').innerHTML    = g.desc;
+    document.getElementById('cmThumb').src         = g.thumb || svgThumb(i);
     document.getElementById('cmStarsDisplay').innerHTML = starsHTML(avg, 5);
     document.getElementById('cmAvgNum').textContent = avg > 0 ? `${avg.toFixed(1)} / 5` : 'No ratings yet';
 
     const isFac = currentRole === 'faculty';
     document.getElementById('facultySection').style.display = isFac ? 'block' : 'none';
     document.getElementById('studentSection').style.display = currentRole === 'student' ? 'block' : 'none';
-    document.getElementById('cmDeleteRow').style.display = isFac ? 'block' : 'none';
+    document.getElementById('cmDeleteRow').style.display    = isFac ? 'block' : 'none';
 
-    if (isFac) renderFacultySection(gid);
-    if (currentRole === 'student') renderStudentSection(gid);
+    // Edit button — student only
+    const editWrap = document.getElementById('cmEditBtnWrap');
+    if (currentRole === 'student') {
+      editWrap.innerHTML = `<button class="cm-edit-toggle-btn" id="cmEditToggleBtn" onclick="toggleEditPanel()">✏️ Edit Proposal</button>`;
+      // Populate edit fields
+      document.getElementById('studentEditTitle').value = g.title || '';
+      document.getElementById('studentEditDesc').value  = g.desc.replace(/<br\s*\/?>/gi, '\n');
+      studentThumbData = g.thumb || '';
+      const p = document.getElementById('studentThumbPreview');
+      const removeBtn = document.getElementById('studentRemoveThumbBtn');
+      if (studentThumbData) { p.src = studentThumbData; p.classList.add('show'); removeBtn.style.display = 'inline-block'; }
+      else { p.src = ''; p.classList.remove('show'); removeBtn.style.display = 'none'; }
+    } else {
+      editWrap.innerHTML = '';
+    }
+
+    // Always close edit panel when re-opening modal
+    const panel = document.getElementById('studentEditPanel');
+    panel.classList.remove('open');
+    panel.style.display = 'none';
+
+    if (isFac)                   renderFacultySection(gid);
+    if (currentRole==='student') renderStudentSection(gid);
 
     showModal('cardModal');
   }
 
+  // ── Save student proposal edits ──
+  window.saveStudentProposalEdits = async function() {
+    const gid      = viewingGroupId;
+    const g        = groups.find(x => x.id === gid);
+    if (!g) return;
+    const newTitle = document.getElementById('studentEditTitle').value.trim();
+    const newDesc  = document.getElementById('studentEditDesc').value.trim();
+    const msg      = document.getElementById('studentEditSavedMsg');
+    
+    if (!newTitle || !newDesc) { alert('Please complete title and description.'); return; }
+
+    msg.textContent = 'Saving…'; msg.style.color = 'var(--subtext)'; msg.classList.add('show');
+
+    try {
+      const result = await fetchJson(API_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action:'updateStudentProposal', groupId:gid, title:newTitle, desc:newDesc, thumb:studentThumbData||'' })
+      });
+      
+      // THIS PART IS NEW: It will alert you if the database sends back an error
+      if (result.status !== 'success') {
+          console.error("Database Error:", result);
+          throw new Error(result.message || 'Save failed');
+      }
+
+      g.title = newTitle;
+      g.desc  = newDesc.replace(/\n/g, '<br>');
+      g.thumb = studentThumbData || '';
+
+      document.getElementById('cmTitle').textContent = g.title;
+      document.getElementById('cmDesc').innerHTML    = g.desc;
+      document.getElementById('cmThumb').src         = g.thumb;
+
+      msg.textContent = '✓ Saved'; msg.style.color = '#10b981';
+      renderGrid();
+
+      setTimeout(() => {
+        msg.classList.remove('show');
+        closeEditPanel();
+      }, 1200);
+    } catch (err) {
+      console.error("Fetch Error:", err); // Look at this in your Console!
+      msg.textContent = '⚠ ' + err.message; // This will show the real error on the button
+      msg.style.color = '#ef4444';
+    }
+};
+
+  // ── Faculty section ──
   function renderFacultySection(gid) {
-    const myRating = (ratings[gid] || {})[currentFaculty.toLowerCase()] || 0;
+    const myRating     = (ratings[gid]||{})[currentFaculty.toLowerCase()]||0;
     const alreadyRated = myRating > 0;
-    const stars = [...document.querySelectorAll('#cmStarRow .star')];
-    const labelEl = document.getElementById('facultySectionLabel');
+    const stars        = [...document.querySelectorAll('#cmStarRow .star')];
+    const labelEl      = document.getElementById('facultySectionLabel');
 
     stars.forEach(s => {
       s.classList.toggle('active', +s.dataset.val <= myRating);
@@ -646,18 +599,13 @@ document.addEventListener("DOMContentLoaded", () => {
           const v = +s.dataset.val;
           if (!ratings[gid]) ratings[gid] = {};
           ratings[gid][currentFaculty.toLowerCase()] = v;
-           stars.forEach(x => x.classList.toggle('active', +x.dataset.val <= v));
+          stars.forEach(x => x.classList.toggle('active', +x.dataset.val <= v));
           const avg = groupAvgRating(gid);
           document.getElementById('cmStarsDisplay').innerHTML = starsHTML(avg, 5);
           document.getElementById('cmAvgNum').textContent = avg > 0 ? `${avg.toFixed(1)} / 5` : 'No ratings yet';
-          
-          updateStats();
-          renderGrid();
+          updateStats(); renderGrid();
         };
-      } else {
-        s.style.cursor = 'default';
-        s.onclick = null;
-      }
+      } else { s.style.cursor = 'default'; s.onclick = null; }
     });
 
     labelEl.innerHTML = alreadyRated
@@ -669,97 +617,65 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   window.saveFacultyFeedback = async function() {
-    const gid = viewingGroupId;
-    const g = groups.find(x => x.id === gid);
-    const text = document.getElementById('cmComment').value.trim(); 
-    const myRating = (ratings[gid] || {})[currentFaculty.toLowerCase()] || 0;
-    const m = document.getElementById('cmSavedMsg');
-
-    if (!text && myRating === 0) {
-      alert('Please provide a rating or a comment.');
-      return;
-    }
-
+    const gid      = viewingGroupId;
+    const g        = groups.find(x => x.id === gid);
+    const text     = document.getElementById('cmComment').value.trim();
+    const myRating = (ratings[gid]||{})[currentFaculty.toLowerCase()]||0;
+    const m        = document.getElementById('cmSavedMsg');
+    if (!text && myRating === 0) { alert('Please provide a rating or a comment.'); return; }
     const commentId = generateId();
-    m.textContent = 'Saving…';
-    m.style.color = 'var(--subtext)';
-    m.classList.add('show');
-
+    m.textContent = 'Saving…'; m.style.color = 'var(--subtext)'; m.classList.add('show');
     try {
       const result = await fetchJson(API_URL, {
         method: 'POST',
-        body: JSON.stringify({
-          action: 'saveFeedback',
-          groupId: gid,
-          title: g ? g.title : '',
-          facultyName: currentFaculty,
-          rating: myRating,
-          comment: text,
-          commentId
-        })
+        body: JSON.stringify({ action:'saveFeedback', groupId:gid, title:g?g.title:'', facultyName:currentFaculty, rating:myRating, comment:text, commentId })
       });
-      // ... inside your saveFacultyFeedback function ...
       if (result.status !== 'success') throw new Error(result.message || 'Save failed');
-
       if (!comments[gid]) comments[gid] = [];
-      comments[gid].push({ id: commentId, name: currentFaculty, text, rating: myRating });
-
-      // FIX HERE: Use lowercase for the key
+      comments[gid].push({ id:commentId, name:currentFaculty, text, rating:myRating });
       if (!ratings[gid]) ratings[gid] = {};
-      ratings[gid][currentFaculty.toLowerCase()] = myRating; 
-
-      m.textContent = '✓ Comment Added';
-      // ... rest of your code ...
-      m.style.color = '#10b981';
+      ratings[gid][currentFaculty.toLowerCase()] = myRating;
+      m.textContent = '✓ Comment Added'; m.style.color = '#10b981';
       document.getElementById('cmComment').value = '';
       updateStats();
       setTimeout(() => m.classList.remove('show'), 2000);
       renderGrid();
-    } catch (err) {
-      m.textContent = '⚠️ Save failed';
-      m.style.color = '#ef4444';
-    }
+    } catch (err) { m.textContent = '⚠️ Save failed'; m.style.color = '#ef4444'; }
   };
 
+  // ── Student section ──
   function renderStudentSection(gid) {
     const allComments = groupAllComments(gid);
-    const favIds = favorites[gid] || [];
-    const listEl = document.getElementById('cmCommentsList');
-    const noEl = document.getElementById('cmNoComments');
-    const favNote = document.getElementById('cmFavNote');
+    const favIds      = favorites[gid] || [];
+    const listEl      = document.getElementById('cmCommentsList');
+    const noEl        = document.getElementById('cmNoComments');
+    const favNote     = document.getElementById('cmFavNote');
 
-    if (!allComments.length) {
-      listEl.innerHTML = '';
-      noEl.style.display = 'block';
-    } else {
+    if (!allComments.length) { listEl.innerHTML = ''; noEl.style.display = 'block'; }
+    else {
       noEl.style.display = 'none';
       listEl.innerHTML = allComments.map((c, idx) => {
         const fav = favIds.includes(c.id);
         return `
-          <div class="comment-card${fav ? ' fav-active' : ''}" id="ccard-${escapeHtml(c.id)}">
-            <div class="comment-card-top">
-              <div class="comment-anon-label">Anonymous Faculty ${idx + 1}</div>
-              <div class="comment-card-stars">${starsHTML(c.rating)}</div>
-            </div>
-            <div class="comment-text">${c.text ? escapeHtml(c.text) : '<em style="color:var(--subtext)">No comment written.</em>'}</div>
-            <div class="comment-card-actions">
-              <button class="heart-fav-btn${fav ? ' hearted' : ''}" onclick="toggleFav('${String(gid).replace(/'/g, "\\'")}','${String(c.id).replace(/'/g, "\\'")}')" title="${fav ? 'Remove from favorites' : 'Add to favorites'}">
-                ${fav ? '❤️' : '🤍'}
-                <span>${fav ? 'Favorited' : 'Favorite'}</span>
-              </button>
-            </div>
+        <div class="comment-card${fav?' fav-active':''}" id="ccard-${escapeHtml(c.id)}">
+          <div class="comment-card-top">
+            <div class="comment-anon-label">Anonymous Faculty ${idx+1}</div>
+            <div class="comment-card-stars">${starsHTML(c.rating)}</div>
           </div>
-        `;
+          <div class="comment-text">${c.text?escapeHtml(c.text):'<em style="color:var(--subtext)">No comment written.</em>'}</div>
+          <div class="comment-card-actions">
+            <button class="heart-fav-btn${fav?' hearted':''}" onclick="toggleFav('${String(gid).replace(/'/g,"\\'")}','${String(c.id).replace(/'/g,"\\'")}' )" title="${fav?'Remove from favorites':'Add to favorites'}">
+              ${fav?'❤️':'🤍'}<span>${fav?'Favorited':'Favorite'}</span>
+            </button>
+          </div>
+        </div>`;
       }).join('');
     }
 
     const favCount = favIds.length;
     if (favCount > 0) {
-      const names = favIds.map(id => {
-        const idx = allComments.findIndex(c => c.id === id);
-        return idx >= 0 ? `Anonymous Faculty ${idx + 1}` : null;
-      }).filter(Boolean);
-      favNote.innerHTML = `<div class="fav-selected-note">❤️ You've favorited <strong>${favCount}</strong> comment${favCount > 1 ? 's' : ''}: ${names.join(', ')}.</div>`;
+      const names = favIds.map(id => { const idx = allComments.findIndex(c=>c.id===id); return idx>=0?`Anonymous Faculty ${idx+1}`:null; }).filter(Boolean);
+      favNote.innerHTML = `<div class="fav-selected-note">❤️ You've favorited <strong>${favCount}</strong> comment${favCount>1?'s':''}: ${names.join(', ')}.</div>`;
     } else {
       favNote.innerHTML = `<span style="font-size:13px;color:var(--subtext);">No favorites yet. Tap ❤️ on any comment to mark it.</span>`;
     }
@@ -769,248 +685,165 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderStudentInsights(gid) {
     const list = insights[gid] || [];
-    const el = document.getElementById('studentInsightsList');
+    const el   = document.getElementById('studentInsightsList');
     if (!el) return;
-
-    if (!list.length) {
-      el.innerHTML = '';
-      return;
-    }
-
+    if (!list.length) { el.innerHTML = ''; return; }
     const sorted = [...list].reverse();
     el.innerHTML = sorted.map((entry, i) => `
       <div class="insight-card">
         <div class="insight-card-top">
-          <span class="insight-label">My Insight #${i + 1}</span>
-          <span style="font-size:11px;color:var(--subtext);">${escapeHtml(entry.ts || '')}</span>
+          <span class="insight-label">My Insight #${i+1}</span>
+          <span style="font-size:11px;color:var(--subtext);">${escapeHtml(entry.ts||'')}</span>
         </div>
         <div class="comment-text">${escapeHtml(entry.text)}</div>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
 
   window.saveStudentInsight = async function() {
-    const gid = viewingGroupId;
+    const gid   = viewingGroupId;
     const input = document.getElementById('studentInsightInput');
-    const text = input.value.trim();
-    const msg = document.getElementById('insightSavedMsg');
-
+    const text  = input.value.trim();
+    const msg   = document.getElementById('insightSavedMsg');
     if (!text) return;
-
-    msg.textContent = 'Saving…';
-    msg.style.color = 'var(--subtext)';
-    msg.classList.add('show');
-
+    msg.textContent = 'Saving…'; msg.style.color = 'var(--subtext)'; msg.classList.add('show');
     try {
       const result = await fetchJson(API_URL, {
         method: 'POST',
-        body: JSON.stringify({
-          action: 'saveStudentInsight',
-          groupId: gid,
-          insightText: text
-        })
+        body: JSON.stringify({ action:'saveStudentInsight', groupId:gid, insightText:text })
       });
-
-      if (result.status !== 'success') {
-        throw new Error(result.message || 'Failed to save');
-      }
-
+      if (result.status !== 'success') throw new Error(result.message || 'Failed to save');
       if (!insights[gid]) insights[gid] = [];
-      insights[gid].push({
-        text: text,
-        ts: result.ts || new Date().toLocaleString()
-      });
-
+      insights[gid].push({ text, ts: result.ts || new Date().toLocaleString() });
       input.value = '';
       renderStudentInsights(gid);
-
-      msg.textContent = '✓ Posted';
-      msg.style.color = '#10b981';
+      msg.textContent = '✓ Posted'; msg.style.color = '#10b981';
       setTimeout(() => msg.classList.remove('show'), 2000);
-    } catch (e) {
+    } catch(e) {
       console.warn('Insight sync failed', e);
-      msg.textContent = '⚠️ Failed to save';
-      msg.style.color = '#ef4444';
+      msg.textContent = '⚠️ Failed to save'; msg.style.color = '#ef4444';
       setTimeout(() => msg.classList.remove('show'), 2000);
     }
   };
 
   window.toggleFav = async function(gid, commentId) {
     if (!favorites[gid]) favorites[gid] = [];
-
-    const alreadyFav = favorites[gid].includes(commentId);
+    const alreadyFav       = favorites[gid].includes(commentId);
     const newFavoriteState = !alreadyFav;
-
-    if (alreadyFav) {
-      favorites[gid] = favorites[gid].filter(id => id !== commentId);
-    } else {
-      favorites[gid].push(commentId);
-    }
-
+    if (alreadyFav) favorites[gid] = favorites[gid].filter(id => id !== commentId);
+    else favorites[gid].push(commentId);
     localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
     renderStudentSection(gid);
-
     try {
       const result = await fetchJson(API_URL, {
         method: 'POST',
-        body: JSON.stringify({
-          action: 'toggleFavorite',
-          groupId: gid,
-          commentId: commentId,
-          isFavorite: newFavoriteState
-        })
+        body: JSON.stringify({ action:'toggleFavorite', groupId:gid, commentId, isFavorite:newFavoriteState })
       });
-
       if (result.status !== 'success') throw new Error(result.message || 'Favorite save failed');
-    } catch (e) {
-      console.warn('Fav sync failed', e);
-    }
+    } catch(e) { console.warn('Fav sync failed', e); }
   };
 
-  window.askDeleteFromModal = function() {
-    pendingDel = viewingGroupId;
-    openModal('delModal');
-  };
-
+  // ── Delete ──
+  window.askDeleteFromModal = function() { pendingDel = viewingGroupId; openModal('delModal'); };
   window.confirmDelete = async function() {
     if (!pendingDel) return;
     const btn = document.querySelector('.btn-conf-delete');
-    btn.textContent = 'Deleting…';
-    btn.disabled = true;
-
-    try {
-      await fetchJson(API_URL, {
-        method:'POST',
-        body: JSON.stringify({ action:'deleteGroup', groupId: pendingDel })
-      });
-    } catch(e) {
-      console.warn('Delete sync failed', e);
-    }
-
+    btn.textContent = 'Deleting…'; btn.disabled = true;
+    try { await fetchJson(API_URL, { method:'POST', body:JSON.stringify({ action:'deleteGroup', groupId:pendingDel }) }); } catch(e) { console.warn('Delete sync failed', e); }
     groups = groups.filter(g => g.id !== pendingDel);
-    delete ratings[pendingDel];
-    delete comments[pendingDel];
-    delete favorites[pendingDel];
-    delete insights[pendingDel];
+    delete ratings[pendingDel]; delete comments[pendingDel]; delete favorites[pendingDel]; delete insights[pendingDel];
     localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
-
-    pendingDel = null;
-    currentPage = 1;
-    closeModal('delModal');
-    closeModal('cardModal');
+    pendingDel = null; currentPage = 1;
+    closeModal('delModal'); closeModal('cardModal');
     renderGrid();
-
-    btn.textContent = 'Yes, Delete';
-    btn.disabled = false;
+    btn.textContent = 'Yes, Delete'; btn.disabled = false;
   };
 
+  // ── Add group ──
   window.openAddModal = function() {
     if (currentRole !== 'faculty') return;
     ['fGroupNum','fTitle','fDesc','fPin'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('fTag').value = '';
-    document.getElementById('fStage').value = '';
+    document.getElementById('fTag').value = ''; document.getElementById('fStage').value = '';
     document.getElementById('fCustomTag').value = '';
     document.getElementById('customTagWrap').style.display = 'none';
     document.getElementById('formErr').style.display = 'none';
-    clearThumb();
-    openModal('addModal');
+    clearThumb(); openModal('addModal');
   };
 
   window.handleTagChange = function() {
     const val = document.getElementById('fTag').value;
     const wrap = document.getElementById('customTagWrap');
-    if (val === 'Other') {
-      wrap.style.display = 'block';
-      document.getElementById('fCustomTag').focus();
-    } else {
-      wrap.style.display = 'none';
-      document.getElementById('fCustomTag').value = '';
-    }
+    if (val === 'Other') { wrap.style.display = 'block'; document.getElementById('fCustomTag').focus(); }
+    else { wrap.style.display = 'none'; document.getElementById('fCustomTag').value = ''; }
   };
 
-  window.onThumbPick = function(e) {
-    const f = e.target.files;
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = ev => {
-      thumbData = ev.target.result;
+ window.onThumbPick = function(e) {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      const MAX_SIZE = 800; 
+      if (width > height) {
+        if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
+      } else {
+        if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      thumbData = canvas.toDataURL('image/jpeg', 0.6); 
       const p = document.getElementById('thumbPreview');
-      p.src = thumbData;
-      p.classList.add('show');
+      p.src = thumbData; p.classList.add('show');
       document.getElementById('removeThumbBtn').style.display = 'block';
     };
-    r.readAsDataURL(f);
+    img.src = event.target.result;
   };
+  reader.readAsDataURL(f);
+};
 
   window.clearThumb = function() {
     thumbData = null;
     const p = document.getElementById('thumbPreview');
-    p.src = '';
-    p.classList.remove('show');
+    p.src = ''; p.classList.remove('show');
     document.getElementById('removeThumbBtn').style.display = 'none';
     document.getElementById('thumbFile').value = '';
   };
 
   window.submitGroup = async function() {
-    const gn = document.getElementById('fGroupNum').value.trim();
-    const ti = document.getElementById('fTitle').value.trim();
-    const de = document.getElementById('fDesc').value.trim();
+    const gn    = document.getElementById('fGroupNum').value.trim();
+    const ti    = document.getElementById('fTitle').value.trim();
+    const de    = document.getElementById('fDesc').value.trim();
     const tgRaw = document.getElementById('fTag').value;
-    const st = document.getElementById('fStage').value;
-    const pin = document.getElementById('fPin').value.trim();
-    const custom = document.getElementById('fCustomTag').value.trim();
-    const tg = tgRaw === 'Other' ? custom : tgRaw;
-    const er = document.getElementById('formErr');
-    const btn = document.querySelector('#addModal .btn-submit');
-
-    if (!gn || !ti || !de || !tgRaw || !st || !pin) {
-      er.textContent = '⚠ Please fill in all required fields, including the PIN.';
-      er.style.display = 'block';
-      return;
-    }
-
-    if (tgRaw === 'Other' && !custom) {
-      er.textContent = '⚠ Please enter a custom tag name.';
-      er.style.display = 'block';
-      document.getElementById('fCustomTag').focus();
-      return;
-    }
-
-    er.style.display = 'none';
-    btn.textContent = 'Saving…';
-    btn.disabled = true;
-
-    const newGroup = { id: gn, groupNum: gn, title: ti, desc: de, tag: tg, stage: st, pin, thumb: thumbData || '' };
-
+    const st    = document.getElementById('fStage').value;
+    const pin   = document.getElementById('fPin').value.trim();
+    const custom= document.getElementById('fCustomTag').value.trim();
+    const tg    = tgRaw === 'Other' ? custom : tgRaw;
+    const er    = document.getElementById('formErr');
+    const btn   = document.querySelector('#addModal .btn-submit');
+    if (!gn||!ti||!de||!tgRaw||!st||!pin) { er.textContent = '⚠ Please fill in all required fields, including the PIN.'; er.style.display = 'block'; return; }
+    if (tgRaw === 'Other' && !custom) { er.textContent = '⚠ Please enter a custom tag name.'; er.style.display = 'block'; document.getElementById('fCustomTag').focus(); return; }
+    er.style.display = 'none'; btn.textContent = 'Saving…'; btn.disabled = true;
+    const newGroup = { id:gn, groupNum:gn, title:ti, desc:de, tag:tg, stage:st, pin, thumb:thumbData||'' };
     try {
-      const result = await fetchJson(API_URL, {
-        method:'POST',
-        body: JSON.stringify({ action:'addGroup', ...newGroup })
-      });
-
+      const result = await fetchJson(API_URL, { method:'POST', body:JSON.stringify({ action:'addGroup', ...newGroup }) });
       if (result.status !== 'success') throw new Error(result.message || 'Failed to save');
-
-      alert("Group submitted successfully! It is pending approval and will appear once approved.");
-      
-      currentPage = 1;
-      closeModal('addModal');
-    } catch(e) {
-      er.textContent = '⚠️ Failed to save to database.';
-      er.style.display = 'block';
-    } finally {
-      btn.textContent = 'Add Group';
-      btn.disabled = false;
-    }
+      alert('Group submitted successfully! It is pending approval and will appear once approved.');
+      currentPage = 1; closeModal('addModal');
+    } catch(e) { er.textContent = '⚠️ Failed to save to database.'; er.style.display = 'block'; }
+    finally { btn.textContent = 'Add Group'; btn.disabled = false; }
   };
 
-  window.openModal = id => document.getElementById(id).classList.add('open');
-  window.closeModal = id => document.getElementById(id).classList.remove('open');
-  window.showModal = id => document.getElementById(id).classList.add('open');
+  // ── Modal utils ──
+  window.openModal    = id => document.getElementById(id).classList.add('open');
+  window.closeModal   = id => document.getElementById(id).classList.remove('open');
+  window.showModal    = id => document.getElementById(id).classList.add('open');
   window.overlayClick = (e,id) => { if (e.target.id === id) closeModal(id); };
-
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      ['addModal','delModal','cardModal','facultyNameModal','studentLoginModal'].forEach(closeModal);
-    }
+    if (e.key === 'Escape') ['addModal','delModal','cardModal','facultyNameModal','studentLoginModal'].forEach(closeModal);
   });
 });

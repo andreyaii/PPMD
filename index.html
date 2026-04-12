@@ -25,11 +25,11 @@
   </div>
 </div>
 
-<!-- FACULTY LOGIN MODAL (UPDATED WITH PIN) -->
+<!-- FACULTY LOGIN MODAL -->
 <div class="modal-overlay" id="facultyNameModal">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header">
-      <div class="modal-title">👩‍🏫 Faculty Access</div>
+      <div class="modal-title">Faculty Access</div>
     </div>
     <div class="form-group">
       <label class="form-label">Full Name <span>*</span></label>
@@ -39,7 +39,7 @@
       <label class="form-label">Access PIN <span>*</span></label>
       <div class="pin-input-wrap">
         <input type="password" class="form-input" id="facultyPinInput" placeholder="Enter your 4-digit PIN" maxlength="10"/>
-        <button type="button" class="pin-eye-btn" id="facPinEyeBtn" onclick="toggleFacPinVisibility()" title="Show/hide PIN">👁</button>
+        <button type="button" class="pin-eye-btn" id="facPinEyeBtn" onclick="toggleFacPinVisibility()" title="Show/hide PIN">🔒</button>
       </div>
     </div>
     <p class="form-error" id="nameErr" style="display:none;margin-top:-10px;margin-bottom:4px;"></p>
@@ -54,7 +54,7 @@
 <div class="modal-overlay" id="studentLoginModal">
   <div class="modal" style="max-width:420px;">
     <div class="modal-header">
-      <div class="modal-title">🎓 Student Access</div>
+      <div class="modal-title">Student Access</div>
     </div>
     <div class="form-group">
       <label class="form-label">Group Number <span>*</span></label>
@@ -64,7 +64,7 @@
       <label class="form-label">Access PIN <span>*</span></label>
       <div class="pin-input-wrap">
         <input type="password" class="form-input" id="studentPinInput" placeholder="Enter the PIN provided by your instructor" maxlength="10"/>
-        <button type="button" class="pin-eye-btn" id="pinEyeBtn" onclick="togglePinVisibility()" title="Show/hide PIN">👁</button>
+        <button type="button" class="pin-eye-btn" id="pinEyeBtn" onclick="togglePinVisibility()" title="Show/hide PIN">🔒</button>
       </div>
     </div>
     <p class="form-error" id="studentLoginErr" style="display:none;margin-top:-10px;margin-bottom:4px;"></p>
@@ -90,17 +90,13 @@
         <span class="search-icon">🔍</span>
         <input type="text" id="searchInput" placeholder="Search by title or group no…"/>
       </div>
-
-      <!-- TAG FILTER DROPDOWN -->
       <div class="tag-filter-wrap" id="tagFilterWrap">
         <button class="tag-filter-btn" id="tagFilterBtn" onclick="toggleTagDropdown()">
-          <span id="tagFilterLabel">🏷 All Tags</span>
+          <span id="tagFilterLabel">All Tags</span>
           <span class="tag-filter-arrow">▾</span>
         </button>
         <div class="tag-dropdown" id="tagDropdown"></div>
       </div>
-
-      <!-- SORT DROPDOWN -->
       <div class="tag-filter-wrap" id="sortWrap" style="display:none;">
         <button class="tag-filter-btn" id="sortFilterBtn" onclick="toggleSortDropdown()">
           <span id="sortFilterLabel">↕ Sort: Default</span>
@@ -114,15 +110,11 @@
           <button class="tag-option"        data-sort="needs_rating" onclick="setSort('needs_rating')">Pending My Review</button>
         </div>
       </div>
-
-      <!-- FACULTY CONTROLS -->
       <div id="facultyControls" style="display:none;align-items:center;gap:10px;">
         <button class="btn-primary" onclick="openAddModal()">＋ Add Group</button>
         <input type="file" id="excelUpload" accept=".xlsx,.xls" style="display:none"/>
       </div>
-
       <div class="role-badge" id="roleBadge" onclick="switchRole()"></div>
-
       <button class="dark-toggle" id="darkToggle" onclick="toggleDarkMode()" title="Toggle dark mode">
         <span id="darkIcon">🌙</span>
       </button>
@@ -171,15 +163,62 @@
       <div class="modal-title" id="cmTitle">—</div>
       <button class="modal-close" onclick="closeModal('cardModal')">✕</button>
     </div>
+
+    <!-- Thumbnail -->
     <div class="cm-thumb-wrap">
       <img id="cmThumb" src="" alt=""/>
       <span class="cm-tag-badge" id="cmTag">—</span>
     </div>
-    <div class="cm-meta">
-      <span class="cm-group-num" id="cmGroupNum">—</span>
-      <span class="cm-stage" id="cmStage">—</span>
+
+    <!-- Meta row: group info left, edit button right -->
+    <div class="cm-meta-row">
+      <div class="cm-meta">
+        <span class="cm-group-num" id="cmGroupNum">—</span>
+        <span class="cm-stage" id="cmStage">—</span>
+      </div>
+      <!-- Edit button — student only, injected via JS -->
+      <div id="cmEditBtnWrap"></div>
     </div>
+
     <p class="cm-desc" id="cmDesc">—</p>
+
+    <!-- EDIT PANEL (collapsible, student only) -->
+    <div id="studentEditPanel" class="edit-panel" style="display:none;">
+      <div class="edit-panel-inner">
+        <div class="edit-panel-header">
+          <span class="edit-panel-title">✏️ Edit Proposal</span>
+          <button class="edit-panel-close" onclick="closeEditPanel()" title="Close">✕</button>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Proposal Title</label>
+          <input class="form-input" id="studentEditTitle" placeholder="Enter updated title"/>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Proposal Description</label>
+          <textarea class="form-textarea" id="studentEditDesc" style="min-height:80px;" placeholder="Enter updated description"></textarea>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Thumbnail Image</label>
+          <div class="edit-thumb-upload" onclick="document.getElementById('studentThumbFile').click()">
+            <input type="file" id="studentThumbFile" accept="image/*" style="display:none" onchange="onStudentThumbPick(event)"/>
+            <span class="edit-thumb-upload-icon">🖼️</span>
+            <span class="edit-thumb-upload-text">Click to upload a new image</span>
+          </div>
+          <img id="studentThumbPreview" class="thumb-preview" alt="Preview"/>
+          <button type="button" id="studentRemoveThumbBtn" class="thumb-remove" style="display:none;" onclick="clearStudentThumb()">✕ Remove image</button>
+        </div>
+
+        <div class="edit-panel-footer">
+          <button class="btn-cancel" onclick="closeEditPanel()">Cancel</button>
+          <button class="save-btn" onclick="saveStudentProposalEdits()">Save Changes</button>
+          <span class="saved-msg" id="studentEditSavedMsg">✓ Saved</span>
+        </div>
+      </div>
+    </div>
+
     <div class="cm-divider"></div>
 
     <!-- Overall Rating -->
@@ -222,7 +261,6 @@
         <p id="cmNoComments" style="font-size:13px;color:var(--subtext);display:none;">No comments yet from faculty.</p>
       </div>
 
-      <!-- Student general insight box -->
       <div class="cm-divider"></div>
       <div class="cm-section">
         <div class="cm-section-label">💡 My Insights</div>
@@ -347,24 +385,37 @@
   function togglePinVisibility() {
     const input = document.getElementById('studentPinInput');
     const btn   = document.getElementById('pinEyeBtn');
-    if (input.type === 'password') {
-      input.type = 'text';
-      btn.textContent = '🙈';
-    } else {
-      input.type = 'password';
-      btn.textContent = '👁';
-    }
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🔓'; }
+    else { input.type = 'password'; btn.textContent = '🔒'; }
   }
 
   function toggleFacPinVisibility() {
     const input = document.getElementById('facultyPinInput');
     const btn   = document.getElementById('facPinEyeBtn');
-    if (input.type === 'password') {
-      input.type = 'text';
-      btn.textContent = '🙈';
+    if (input.type === 'password') { input.type = 'text'; btn.textContent = '🔓'; }
+    else { input.type = 'password'; btn.textContent = '🔒'; }
+  }
+
+  function closeEditPanel() {
+    const panel = document.getElementById('studentEditPanel');
+    panel.classList.remove('open');
+    setTimeout(() => { panel.style.display = 'none'; }, 280);
+    const btn = document.getElementById('cmEditToggleBtn');
+    if (btn) btn.classList.remove('active');
+  }
+
+  function toggleEditPanel() {
+    const panel = document.getElementById('studentEditPanel');
+    const btn   = document.getElementById('cmEditToggleBtn');
+    const isOpen = panel.classList.contains('open');
+    if (isOpen) {
+      panel.classList.remove('open');
+      setTimeout(() => { panel.style.display = 'none'; }, 280);
+      if (btn) btn.classList.remove('active');
     } else {
-      input.type = 'password';
-      btn.textContent = '👁';
+      panel.style.display = 'block';
+      requestAnimationFrame(() => panel.classList.add('open'));
+      if (btn) btn.classList.add('active');
     }
   }
 </script>
