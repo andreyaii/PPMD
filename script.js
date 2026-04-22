@@ -336,7 +336,7 @@ window.onStudentThumbPick = function(e) {
 
   window.setTagFilter = function(tag) {
     activeTag = tag;
-    document.getElementById('tagFilterLabel').textContent = tag === 'all' ? 'All Tags' : + tag;
+    document.getElementById('tagFilterLabel').textContent = tag === 'all' ? 'All Tags' : tag;
     document.getElementById('tagFilterBtn').classList.toggle('active-filter', tag !== 'all');
     document.getElementById('tagFilterBtn').classList.remove('open');
     document.getElementById('tagDropdown').classList.remove('open');
@@ -412,7 +412,7 @@ window.onStudentThumbPick = function(e) {
     const start    = (currentPage - 1) * PAGE_SIZE;
     const pageList = list.slice(start, start + PAGE_SIZE);
 
-    grid.innerHTML = pageList.map((g,i) => cardHTML(g, start+i)).join('');
+    grid.innerHTML = pageList.map((g) => cardHTML(g, groups.findIndex(x => x.id === g.id))).join('');
     pageList.forEach(g => {
       const el = document.getElementById('card-' + g.id);
       if (el) el.addEventListener('click', () => openCardModal(g.id));
@@ -488,7 +488,7 @@ window.onStudentThumbPick = function(e) {
     const g = groups.find(x => x.id === gid);
     if (!g) return;
     viewingGroupId = gid;
-    const i   = groups.indexOf(g);
+    const i = groups.findIndex(x => x.id === gid);
     const avg = groupAvgRating(gid);
 
     document.getElementById('cmTitle').textContent = g.title;
