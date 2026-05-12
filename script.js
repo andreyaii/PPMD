@@ -219,7 +219,7 @@ window.onStudentThumbPick = function(e) {
     const facultyUser = faculties.find(f => f.searchString.includes(cleanName) && f.searchString.includes(cleanPin));
     if (!facultyUser) {
       let debugInfo = faculties.map(f => f.searchString.replace(/\|\|\|/g, ' ')).join('<br>');
-      err.innerHTML = `⚠ Login failed. The database is reading these values:<br><span style="font-size:11px;color:#888;">${debugInfo}</span>`;
+      err.innerHTML = `⚠ Incorrect Username or Password. ~<br><span style="font-size:11px;color:#888;"></span>`;
       err.style.display = 'block';
       return;
     }
