@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_URL = 'https://script.google.com/macros/s/AKfycbwtiZtSabHjmZK6KdX0ulw3R1pb2kEYN3FBDhDH7A47n8iFiozftUGe7S7o65huSuFpgQ/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbySMmL8jYZ1r5hgb8mbKfmSeg7XH0BeTyYtwlH4Pk0oKDqG7_TfM2OJcgZ_Ewb5C_0ldg/exec';
 
   const FAV_KEY = 'cap_favorites_v3';
 
@@ -52,7 +52,8 @@ document.addEventListener("DOMContentLoaded", () => {
         stage: String(row[4] || 'Capstone 1'),
         status: String(row[5] || ''),
         pin: String(row[6] || ''),
-        thumb: String(row[7] || '').trim()
+        thumb: String(row[7] || '').trim(),
+        proposal: String(row[8] || '').trim()
       }));
 
       groups = groups.filter(g => {
@@ -516,6 +517,7 @@ window.onStudentThumbPick = function(e) {
       // Populate edit fields
       document.getElementById('studentEditTitle').value = g.title || '';
       document.getElementById('studentEditDesc').value  = g.desc.replace(/<br\s*\/?>/gi, '\n');
+      document.getElementById('studentEditProposal').value = g.proposal || '';
       studentThumbData = g.thumb || '';
       const p = document.getElementById('studentThumbPreview');
       const removeBtn = document.getElementById('studentRemoveThumbBtn');
@@ -523,6 +525,14 @@ window.onStudentThumbPick = function(e) {
       else { p.src = ''; p.classList.remove('show'); removeBtn.style.display = 'none'; }
     } else {
       editWrap.innerHTML = '';
+    }
+
+    // Proposal button — faculty only
+    const proposalWrap = document.getElementById('cmProposalBtnWrap');
+    if (currentRole === 'faculty' && g.proposal) {
+      proposalWrap.innerHTML = `<a href="${escapeHtml(g.proposal)}" target="_blank" class="cm-edit-toggle-btn" style="display:inline-flex;text-decoration:none;">📄 VISIT Proposal (PDF)</a>`;
+    } else {
+      proposalWrap.innerHTML = '';
     }
 
     // Always close edit panel when re-opening modal
@@ -543,6 +553,7 @@ window.onStudentThumbPick = function(e) {
     if (!g) return;
     const newTitle = document.getElementById('studentEditTitle').value.trim();
     const newDesc  = document.getElementById('studentEditDesc').value.trim();
+    const newProp  = document.getElementById('studentEditProposal').value.trim();
     const msg      = document.getElementById('studentEditSavedMsg');
     
     if (!newTitle || !newDesc) { alert('Please complete title and description.'); return; }
@@ -552,7 +563,7 @@ window.onStudentThumbPick = function(e) {
     try {
       const result = await fetchJson(API_URL, {
         method: 'POST',
-        body: JSON.stringify({ action:'updateStudentProposal', groupId:gid, title:newTitle, desc:newDesc, thumb:studentThumbData||'' })
+        body: JSON.stringify({ action:'updateStudentProposal', groupId:gid, title:newTitle, desc:newDesc, thumb:studentThumbData||'', proposal:newProp||'' })
       });
       
       // THIS PART IS NEW: It will alert you if the database sends back an error
@@ -564,6 +575,7 @@ window.onStudentThumbPick = function(e) {
       g.title = newTitle;
       g.desc  = newDesc.replace(/\n/g, '<br>');
       g.thumb = studentThumbData || '';
+      g.proposal = newProp || '';
 
       document.getElementById('cmTitle').textContent = g.title;
       document.getElementById('cmDesc').innerHTML    = g.desc;
@@ -628,7 +640,15 @@ window.onStudentThumbPick = function(e) {
     try {
       const result = await fetchJson(API_URL, {
         method: 'POST',
-        body: JSON.stringify({ action:'saveFeedback', groupId:gid, title:g?g.title:'', facultyName:currentFaculty, rating:myRating, comment:text, commentId })
+        body: JSON.stringify({
+          action:'saveFeedback',
+          groupId:gid,
+          projectTitle:g ? g.title : '',
+          faculty:currentFaculty,
+          rating:myRating,
+          comment:text,
+          commentId:commentId
+        })
       });
       if (result.status !== 'success') throw new Error(result.message || 'Save failed');
       if (!comments[gid]) comments[gid] = [];
@@ -761,7 +781,7 @@ window.onStudentThumbPick = function(e) {
   // ── Add group ──
   window.openAddModal = function() {
     if (currentRole !== 'faculty') return;
-    ['fGroupNum','fTitle','fDesc','fPin'].forEach(id => document.getElementById(id).value = '');
+    ['fGroupNum','fTitle','fDesc','fPin','fProposal'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('fTag').value = ''; document.getElementById('fStage').value = '';
     document.getElementById('fCustomTag').value = '';
     document.getElementById('customTagWrap').style.display = 'none';
@@ -822,13 +842,14 @@ window.onStudentThumbPick = function(e) {
     const st    = document.getElementById('fStage').value;
     const pin   = document.getElementById('fPin').value.trim();
     const custom= document.getElementById('fCustomTag').value.trim();
+    const prop  = document.getElementById('fProposal').value.trim();
     const tg    = tgRaw === 'Other' ? custom : tgRaw;
     const er    = document.getElementById('formErr');
     const btn   = document.querySelector('#addModal .btn-submit');
     if (!gn||!ti||!de||!tgRaw||!st||!pin) { er.textContent = '⚠ Please fill in all required fields, including the PIN.'; er.style.display = 'block'; return; }
     if (tgRaw === 'Other' && !custom) { er.textContent = '⚠ Please enter a custom tag name.'; er.style.display = 'block'; document.getElementById('fCustomTag').focus(); return; }
     er.style.display = 'none'; btn.textContent = 'Saving…'; btn.disabled = true;
-    const newGroup = { id:gn, groupNum:gn, title:ti, desc:de, tag:tg, stage:st, pin, thumb:thumbData||'' };
+    const newGroup = { id:gn, groupNum:gn, title:ti, desc:de, tag:tg, stage:st, pin, thumb:thumbData||'', proposal:prop||'' };
     try {
       const result = await fetchJson(API_URL, { method:'POST', body:JSON.stringify({ action:'addGroup', ...newGroup }) });
       if (result.status !== 'success') throw new Error(result.message || 'Failed to save');

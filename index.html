@@ -176,8 +176,11 @@
         <span class="cm-group-num" id="cmGroupNum">—</span>
         <span class="cm-stage" id="cmStage">—</span>
       </div>
-      <!-- Edit button — student only, injected via JS -->
-      <div id="cmEditBtnWrap"></div>
+      <!-- Buttons container — proposal and edit aligned right -->
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div id="cmProposalBtnWrap"></div>
+        <div id="cmEditBtnWrap"></div>
+      </div>
     </div>
 
     <p class="cm-desc" id="cmDesc">—</p>
@@ -209,6 +212,11 @@
           </div>
           <img id="studentThumbPreview" class="thumb-preview" alt="Preview"/>
           <button type="button" id="studentRemoveThumbBtn" class="thumb-remove" style="display:none;" onclick="clearStudentThumb()">✕ Remove image</button>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Proposal Link (PDF)</label>
+          <input class="form-input" id="studentEditProposal" placeholder="e.g. https://docs.google.com/..." type="url"/>
         </div>
 
         <div class="edit-panel-footer">
@@ -344,6 +352,11 @@
     <div class="form-group">
       <label class="form-label">Description<span>*</span></label>
       <textarea class="form-textarea" id="fDesc" placeholder="Describe the project proposal…"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Proposal Link (PDF)</label>
+      <input class="form-input" id="fProposal" placeholder="e.g. https://docs.google.com/..." type="url"/>
+      <p style="font-size:11px;color:var(--subtext);margin-top:4px;">Optional: Link to the PDF proposal document</p>
     </div>
     <p class="form-error" id="formErr"></p>
     <div class="modal-footer">
