@@ -252,7 +252,7 @@
             <span class="star" data-val="5">★</span>
           </div>
         </div>
-        <textarea class="comment-box" id="cmComment" placeholder="Write your feedback on this proposal…"></textarea>
+        <textarea class="comment-box" id="cmComment" placeholder="If you are willing to advise this team, in what direction should the team place greater emphasis and attention moving forward?"></textarea>
         <div class="action-row" style="margin-top:8px;">
           <button class="save-btn" onclick="saveFacultyFeedback()">Save Feedback</button>
           <span class="saved-msg" id="cmSavedMsg">✓ Saved</span>
@@ -287,10 +287,6 @@
       </div>
     </div>
 
-    <!-- DELETE (faculty only) -->
-    <div id="cmDeleteRow" style="display:none;margin-top:16px;">
-      <button class="delete-btn" style="margin-left:0;width:100%;" onclick="askDeleteFromModal()">🗑 Delete This Proposal</button>
-    </div>
   </div>
 </div>
 
@@ -362,19 +358,6 @@
     <div class="modal-footer">
       <button class="btn-cancel" onclick="closeModal('addModal')">Cancel</button>
       <button class="btn-submit" onclick="submitGroup()">Add Group</button>
-    </div>
-  </div>
-</div>
-
-<!-- DELETE CONFIRM MODAL -->
-<div class="modal-overlay" id="delModal" onclick="overlayClick(event,'delModal')">
-  <div class="confirm-modal">
-    <div class="confirm-icon">🗑️</div>
-    <div class="confirm-title">Delete Proposal?</div>
-    <div class="confirm-msg">This will permanently remove the group and all its ratings and comments. This cannot be undone.</div>
-    <div class="confirm-actions">
-      <button class="btn-conf-cancel" onclick="closeModal('delModal')">Cancel</button>
-      <button class="btn-conf-delete" onclick="confirmDelete()">Yes, Delete</button>
     </div>
   </div>
 </div>

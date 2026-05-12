@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_URL = 'https://script.google.com/macros/s/AKfycbySMmL8jYZ1r5hgb8mbKfmSeg7XH0BeTyYtwlH4Pk0oKDqG7_TfM2OJcgZ_Ewb5C_0ldg/exec';
+  const API_URL = 'https://script.google.com/macros/s/AKfycbyzns07XspkgRcIuYNeRM-O2Y_3dIvzSL0GcN12T3PXjBm14_lulGsIujObjBUq9EqTRA/exec';
 
   const FAV_KEY = 'cap_favorites_v3';
 
@@ -122,7 +122,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentFaculty    = null;
   let loggedInStudentId = null;
   let viewingGroupId    = null;
-  let pendingDel        = null;
   let thumbData         = null;
   let studentThumbData  = null;
 
@@ -508,7 +507,6 @@ window.onStudentThumbPick = function(e) {
     const isFac = currentRole === 'faculty';
     document.getElementById('facultySection').style.display = isFac ? 'block' : 'none';
     document.getElementById('studentSection').style.display = currentRole === 'student' ? 'block' : 'none';
-    document.getElementById('cmDeleteRow').style.display    = isFac ? 'block' : 'none';
 
     // Edit button — student only
     const editWrap = document.getElementById('cmEditBtnWrap');
@@ -762,22 +760,6 @@ window.onStudentThumbPick = function(e) {
     } catch(e) { console.warn('Fav sync failed', e); }
   };
 
-  // ── Delete ──
-  window.askDeleteFromModal = function() { pendingDel = viewingGroupId; openModal('delModal'); };
-  window.confirmDelete = async function() {
-    if (!pendingDel) return;
-    const btn = document.querySelector('.btn-conf-delete');
-    btn.textContent = 'Deleting…'; btn.disabled = true;
-    try { await fetchJson(API_URL, { method:'POST', body:JSON.stringify({ action:'deleteGroup', groupId:pendingDel }) }); } catch(e) { console.warn('Delete sync failed', e); }
-    groups = groups.filter(g => g.id !== pendingDel);
-    delete ratings[pendingDel]; delete comments[pendingDel]; delete favorites[pendingDel]; delete insights[pendingDel];
-    localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
-    pendingDel = null; currentPage = 1;
-    closeModal('delModal'); closeModal('cardModal');
-    renderGrid();
-    btn.textContent = 'Yes, Delete'; btn.disabled = false;
-  };
-
   // ── Add group ──
   window.openAddModal = function() {
     if (currentRole !== 'faculty') return;
@@ -865,6 +847,6 @@ window.onStudentThumbPick = function(e) {
   window.showModal    = id => document.getElementById(id).classList.add('open');
   window.overlayClick = (e,id) => { if (e.target.id === id) closeModal(id); };
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') ['addModal','delModal','cardModal','facultyNameModal','studentLoginModal'].forEach(closeModal);
+    if (e.key === 'Escape') ['addModal','cardModal','facultyNameModal','studentLoginModal'].forEach(closeModal);
   });
 });
