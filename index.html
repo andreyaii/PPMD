@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>PPMD</title>
 <link rel="icon" type="image/png" href="res/logo.png">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap%22 rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
- 
+
 <!-- ROLE SELECTION MODAL -->
 <div class="modal-overlay open" id="nameModal">
   <div class="modal" style="max-width:420px;text-align:center;">
@@ -24,7 +24,7 @@
     </div>
   </div>
 </div>
- 
+
 <!-- FACULTY LOGIN MODAL -->
 <div class="modal-overlay" id="facultyNameModal">
   <div class="modal" style="max-width:420px;">
@@ -38,7 +38,7 @@
     <div class="form-group">
       <label class="form-label">Access PIN <span>*</span></label>
       <div class="pin-input-wrap">
-        <input type="password" class="form-input" id="facultyPinInput" placeholder="Enter your PIN" maxlength="10"/>
+        <input type="password" class="form-input" id="facultyPinInput" placeholder="Enter your 4-digit PIN" maxlength="10"/>
         <button type="button" class="pin-eye-btn" id="facPinEyeBtn" onclick="toggleFacPinVisibility()" title="Show/hide PIN">🔒</button>
       </div>
     </div>
@@ -49,7 +49,7 @@
     </div>
   </div>
 </div>
- 
+
 <!-- STUDENT LOGIN MODAL -->
 <div class="modal-overlay" id="studentLoginModal">
   <div class="modal" style="max-width:420px;">
@@ -57,8 +57,8 @@
       <div class="modal-title">Student Access</div>
     </div>
     <div class="form-group">
-      <label class="form-label">Group Code <span>*</span></label>
-      <input class="form-input" id="studentGroupInput" placeholder="e.g. 2526-sem2-it332-01"/>
+      <label class="form-label">Group Number <span>*</span></label>
+      <input class="form-input" id="studentGroupInput" placeholder="e.g. G-01"/>
     </div>
     <div class="form-group">
       <label class="form-label">Access PIN <span>*</span></label>
@@ -74,7 +74,7 @@
     </div>
   </div>
 </div>
- 
+
 <!-- HEADER -->
 <header>
   <div class="header-inner">
@@ -121,7 +121,7 @@
     </div>
   </div>
 </header>
- 
+
 <!-- STATS BAR -->
 <div class="stats-bar">
   <div class="stats-bar-left">
@@ -134,14 +134,14 @@
     <div class="stat-chip"><span class="stat-chip-dot" style="background:#6b7280"></span><span>Unrated</span><span class="stat-chip-num" id="statUnrated">0</span></div>
   </div>
 </div>
- 
+
 <!-- STAGE TABS -->
 <div class="filter-tabs">
   <button class="filter-tab active" data-stage="all" onclick="setStage('all')">All Groups</button>
   <button class="filter-tab" data-stage="Capstone 1" onclick="setStage('Capstone 1')">Capstone 1</button>
   <button class="filter-tab" data-stage="Software Engineering 1" onclick="setStage('Software Engineering 1')">Software Engineering 1</button>
 </div>
- 
+
 <!-- GRID -->
 <div class="grid-section">
   <div class="section-label" id="sectionLabel">All Projects</div>
@@ -155,7 +155,7 @@
     </div>
   </div>
 </div>
- 
+
 <!-- CARD DETAIL MODAL -->
 <div class="modal-overlay" id="cardModal" onclick="overlayClick(event,'cardModal')">
   <div class="modal card-modal">
@@ -163,13 +163,13 @@
       <div class="modal-title" id="cmTitle">—</div>
       <button class="modal-close" onclick="closeModal('cardModal')">✕</button>
     </div>
- 
+
     <!-- Thumbnail -->
     <div class="cm-thumb-wrap">
       <img id="cmThumb" src="" alt=""/>
       <span class="cm-tag-badge" id="cmTag">—</span>
     </div>
- 
+
     <!-- Meta row: group info left, edit button right -->
     <div class="cm-meta-row">
       <div class="cm-meta">
@@ -182,9 +182,9 @@
         <div id="cmEditBtnWrap"></div>
       </div>
     </div>
- 
+
     <p class="cm-desc" id="cmDesc">—</p>
- 
+
     <!-- EDIT PANEL (collapsible, student only) -->
     <div id="studentEditPanel" class="edit-panel" style="display:none;">
       <div class="edit-panel-inner">
@@ -192,17 +192,17 @@
           <span class="edit-panel-title">✏️ Edit Proposal</span>
           <button class="edit-panel-close" onclick="closeEditPanel()" title="Close">✕</button>
         </div>
- 
+
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Proposal Title</label>
           <input class="form-input" id="studentEditTitle" placeholder="Enter updated title"/>
         </div>
- 
+
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Proposal Description</label>
           <textarea class="form-textarea" id="studentEditDesc" style="min-height:80px;" placeholder="Enter updated description"></textarea>
         </div>
- 
+
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Thumbnail Image</label>
           <div class="edit-thumb-upload" onclick="document.getElementById('studentThumbFile').click()">
@@ -213,12 +213,12 @@
           <img id="studentThumbPreview" class="thumb-preview" alt="Preview"/>
           <button type="button" id="studentRemoveThumbBtn" class="thumb-remove" style="display:none;" onclick="clearStudentThumb()">✕ Remove image</button>
         </div>
- 
+
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">Proposal Link (PDF)</label>
           <input class="form-input" id="studentEditProposal" placeholder="e.g. https://docs.google.com/..." type="url"/>
         </div>
- 
+
         <div class="edit-panel-footer">
           <button class="btn-cancel" onclick="closeEditPanel()">Cancel</button>
           <button class="save-btn" onclick="saveStudentProposalEdits()">Save Changes</button>
@@ -226,9 +226,9 @@
         </div>
       </div>
     </div>
- 
+
     <div class="cm-divider"></div>
- 
+
     <!-- Overall Rating -->
     <div class="cm-section">
       <div class="cm-section-label">⭐ Overall Rating</div>
@@ -237,7 +237,7 @@
         <span class="cm-avg-num" id="cmAvgNum">—</span>
       </div>
     </div>
- 
+
     <!-- FACULTY SECTION -->
     <div id="facultySection" style="display:none">
       <div class="cm-divider"></div>
@@ -259,7 +259,7 @@
         </div>
       </div>
     </div>
- 
+
     <!-- STUDENT SECTION -->
     <div id="studentSection" style="display:none">
       <div class="cm-divider"></div>
@@ -268,7 +268,7 @@
         <div id="cmCommentsList" class="cm-comments-list"></div>
         <p id="cmNoComments" style="font-size:13px;color:var(--subtext);display:none;">No comments yet from faculty.</p>
       </div>
- 
+
       <div class="cm-divider"></div>
       <div class="cm-section">
         <div class="cm-section-label">💡 My Insights</div>
@@ -279,17 +279,17 @@
         </div>
         <div id="studentInsightsList" style="margin-top:12px;display:flex;flex-direction:column;gap:8px;"></div>
       </div>
- 
+
       <div class="cm-divider"></div>
       <div class="cm-section">
         <div class="cm-section-label">❤️ My Favorites <span style="font-size:11px;color:var(--subtext);font-weight:400;">(heart comments you found most helpful)</span></div>
         <div id="cmFavNote" class="cm-fav-note"></div>
       </div>
     </div>
- 
+
   </div>
 </div>
- 
+
 <!-- ADD GROUP MODAL -->
 <div class="modal-overlay" id="addModal" onclick="overlayClick(event,'addModal')">
   <div class="modal">
@@ -361,7 +361,7 @@
     </div>
   </div>
 </div>
- 
+
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="script.js"></script>
 <script>
@@ -377,21 +377,21 @@
     applyDark(isDark);
   }
   applyDark(localStorage.getItem(DARK_KEY) === 'true');
- 
+
   function togglePinVisibility() {
     const input = document.getElementById('studentPinInput');
     const btn   = document.getElementById('pinEyeBtn');
     if (input.type === 'password') { input.type = 'text'; btn.textContent = '🔓'; }
     else { input.type = 'password'; btn.textContent = '🔒'; }
   }
- 
+
   function toggleFacPinVisibility() {
     const input = document.getElementById('facultyPinInput');
     const btn   = document.getElementById('facPinEyeBtn');
     if (input.type === 'password') { input.type = 'text'; btn.textContent = '🔓'; }
     else { input.type = 'password'; btn.textContent = '🔒'; }
   }
- 
+
   function closeEditPanel() {
     const panel = document.getElementById('studentEditPanel');
     panel.classList.remove('open');
@@ -399,7 +399,7 @@
     const btn = document.getElementById('cmEditToggleBtn');
     if (btn) btn.classList.remove('active');
   }
- 
+
   function toggleEditPanel() {
     const panel = document.getElementById('studentEditPanel');
     const btn   = document.getElementById('cmEditToggleBtn');
@@ -417,4 +417,3 @@
 </script>
 </body>
 </html>
- 
