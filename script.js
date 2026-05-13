@@ -1,6 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_URL = 'https://script.google.com/macros/s/AKfycbyzns07XspkgRcIuYNeRM-O2Y_3dIvzSL0GcN12T3PXjBm14_lulGsIujObjBUq9EqTRA/exec';
- 
+  const API_URL = 'https://script.google.com/macros/s/AKfycbyzns07XspkgRcIuYNeRM-O2Y_3dIvzSL0GcN12T3PXjBm14_lulGsIujObjBUq9EqTRA/exec'; 
   const FAV_KEY = 'cap_favorites_v3';
  
   let groups = [];
