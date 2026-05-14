@@ -180,7 +180,7 @@ function statusDisplayText(status) {
     return 'Approved';
   }
 
-  return `Assigned by: ${raw}`;
+  return `${raw}`;
 }
 
 function statusClass(status) {
