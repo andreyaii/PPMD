@@ -69,7 +69,8 @@ document.addEventListener("DOMContentLoaded", () => {
         };
       });
  
-      groups = groups.filter(g => isVisibleStatus(g.status));
+      // groups = groups.filter(g => isVisibleStatus(g.status)); 
+      
  
       faculties = (data.faculties || []).map(row => {
         let facultyId = '';
@@ -154,10 +155,49 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentPage = 1;
   const PAGE_SIZE = 12;
 
-  function isVisibleStatus(status) {
-    const clean = String(status || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    return clean === 'approved';
+function cleanStatusText(status) {
+  return String(status || '').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeStatus(status) {
+  return cleanStatusText(status).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+}
+
+function isVisibleStatus(status) {
+  const clean = normalizeStatus(status);
+
+  // blank = hidden
+  // old "Not Approved" rows = hidden
+  // "Approved" and names = visible
+  return clean !== '' && clean !== 'notapproved';
+}
+
+function statusDisplayText(status) {
+  const raw = cleanStatusText(status);
+  if (!isVisibleStatus(raw)) return '';
+
+  if (normalizeStatus(raw) === 'approved') {
+    return 'Approved';
   }
+
+  return `Assigned by: ${raw}`;
+}
+
+function statusClass(status) {
+  return normalizeStatus(status) === 'approved' ? 'approved' : 'assigned';
+}
+
+function statusBadgeHTML(status, extraClass = '') {
+  const text = statusDisplayText(status);
+  if (!text) return '';
+
+  return `<span class="status-badge ${statusClass(status)} ${extraClass}">${escapeHtml(text)}</span>`;
+}
+
+function canSeeStatus(g) {
+  return currentRole === 'faculty' || 
+         (currentRole === 'student' && g.id === loggedInStudentId);
+}
  
   // ── Role selection ──
   window.chooseRole = function(role) {
@@ -546,6 +586,7 @@ document.addEventListener("DOMContentLoaded", () => {
     <div class="card" id="card-${escapeHtml(g.id)}" style="animation-delay:${delay}s">
       <div class="card-thumb">
         <img src="${thumb}" alt="${escapeHtml(g.title)}" onerror="this.src='${svgThumb(i)}'"/>
+        ${canSeeStatus(g) ? statusBadgeHTML(g.status, 'thumb-status-badge') : ''}
         <div class="thumb-badge">${escapeHtml(g.tag||'—')}</div>
       </div>
       <div class="card-body">
@@ -603,8 +644,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const avg = groupAvgRating(gid);
  
     document.getElementById('cmTitle').textContent = g.title;
- 
+    
+    const cmStatus = document.getElementById('cmStatus');
+    const statusText = canSeeStatus(g) ? statusDisplayText(g.status) : '';
+
+    if (statusText) {
+      cmStatus.textContent = statusText;
+      cmStatus.className = `status-badge cm-status-badge ${statusClass(g.status)}`;
+      cmStatus.style.display = 'inline-block';
+    } else {
+      cmStatus.textContent = '';
+      cmStatus.style.display = 'none';
+    }
+
     const cmGroupNum = document.getElementById('cmGroupNum');
+
     if (currentRole === 'faculty') { cmGroupNum.textContent = ''; cmGroupNum.style.display = 'none'; }
     else { cmGroupNum.textContent = `Group ${g.groupNum}`; cmGroupNum.style.display = ''; }
  

@@ -158,7 +158,7 @@
 <!-- CARD DETAIL MODAL -->
 <div class="modal-overlay" id="cardModal" onclick="overlayClick(event,'cardModal')">
   <div class="modal card-modal">
-    <div class="modal-header">
+      <div class="modal-header">
       <div class="modal-title" id="cmTitle">—</div>
       <button class="modal-close" onclick="closeModal('cardModal')">✕</button>
     </div>
@@ -166,6 +166,7 @@
     <!-- Thumbnail -->
     <div class="cm-thumb-wrap">
       <img id="cmThumb" src="" alt=""/>
+      <span class="status-badge cm-status-badge" id="cmStatus" style="display:none;">—</span>
       <span class="cm-tag-badge" id="cmTag">—</span>
     </div>
 

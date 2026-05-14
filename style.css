@@ -168,6 +168,66 @@ header{background:#fff;border-bottom:1px solid var(--border);position:sticky;top
 .modal-overlay.open .modal{transform:translateY(0) scale(1);}
 .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;}
 .modal-title{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--text);}
+.modal-title-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.status-badge {
+  display: inline-block;
+  max-width: calc(100% - 20px);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: .2px;
+  color: #fff;
+  background: var(--primary);
+  border: 1px solid rgba(255,255,255,.22);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+
+.status-badge.approved {
+  background: #10b981;
+  color: #fff;
+  border-color: #059669;
+}
+
+.status-badge.assigned {
+  background: var(--primary);
+  color: #fff;
+}
+
+.thumb-status-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  max-width: calc(100% - 120px);
+}
+
+.cm-status-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  max-width: calc(100% - 150px);
+}
+
+html.dark .status-badge.approved {
+  background: #059669;
+  color: #fff;
+}
+
+html.dark .status-badge.assigned {
+  background: #6366f1;
+  color: #fff;
+}
 .modal-close{background:var(--bg);border:none;border-radius:8px;width:32px;height:32px;
   display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;
   color:var(--subtext);transition:var(--transition);flex-shrink:0;}
