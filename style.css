@@ -134,9 +134,10 @@ header{background:#fff;border-bottom:1px solid var(--border);position:sticky;top
 .card-thumb{width:100%;aspect-ratio:16/9;overflow:hidden;position:relative;background:var(--primary-light);}
 .card-thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease;}
 .card:hover .card-thumb img{transform:scale(1.04);}
-.thumb-badge{position:absolute;top:10px;right:10px;background:rgba(255,255,255,.93);
+.thumb-badge{position:absolute;left:10px;bottom:10px;right:auto;background:rgba(255,255,255,.93);
   backdrop-filter:blur(8px);border-radius:20px;padding:3px 10px;font-size:11px;
-  font-weight:600;color:var(--primary);border:1px solid rgba(79,70,229,.15);}
+  font-weight:600;color:var(--primary);border:1px solid rgba(79,70,229,.15);
+  max-width: calc(100% - 20px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .card-body{padding:14px 18px 8px;}
 .card-group-num{font-size:11px;font-weight:600;color:var(--primary);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;}
 .card-title{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--text);
