@@ -680,7 +680,6 @@ function canSeeStatus(g) {
       // Populate edit fields
       document.getElementById('studentEditTitle').value = g.title || '';
       document.getElementById('studentEditDesc').value  = g.desc.replace(/<br\s*\/?>/gi, '\n');
-      document.getElementById('studentEditProposal').value = g.proposal || '';
     } else {
       editWrap.innerHTML = '';
     }
