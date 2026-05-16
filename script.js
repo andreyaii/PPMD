@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_URL = 'https://script.google.com/macros/s/AKfycbySMmL8jYZ1r5hgb8mbKfmSeg7XH0BeTyYtwlH4Pk0oKDqG7_TfM2OJcgZ_Ewb5C_0ldg/exec';
+  const API_URL = '/api/fetch-sheets';
  
   const FAV_KEY = 'cap_favorites_v3';
  
